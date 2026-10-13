@@ -221,6 +221,13 @@ body.th-halloween #hudbal,body.th-halloween .toast b,body.th-halloween #pretitle
 body.alert::before{opacity:.9;animation:hpulse .5s ease-in-out infinite;box-shadow:inset 0 0 140px 30px rgba(255,0,40,.6)}
 #hudbuff,#hudpen{font-size:.72em;white-space:pre-line;margin-top:3px}
 #hudbuff{color:#6dff9a}#hudpen{color:#ff5566;text-shadow:0 0 6px #ff3355}
+#mgbox{display:none;position:fixed;inset:0;z-index:6;background:rgba(0,0,0,.8);align-items:center;justify-content:center}
+.mgcard{border:var(--bw) var(--bs) var(--fg);background:var(--bg);padding:12px;box-shadow:0 0 24px rgba(var(--glow),.5);width:min(94vw,560px)}
+.mghead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+#mgcv{width:100%;display:block;background:#030303;border:1px solid var(--dim);cursor:crosshair;touch-action:none}
+#mghint{margin-top:6px;opacity:.8;font-size:.85em}
+#mginvite{display:none;position:fixed;right:14px;bottom:14px;z-index:8;border:var(--bw) var(--bs) var(--fg);background:var(--bg);padding:10px 14px;box-shadow:0 0 18px rgba(var(--glow),.6);animation:tin .35s cubic-bezier(.2,1.4,.4,1)}
+#mginvite div+div{margin-top:8px;display:flex;gap:8px}
 </style>
 </head>
 <body>
@@ -250,6 +257,11 @@ body.alert::before{opacity:.9;animation:hpulse .5s ease-in-out infinite;box-shad
   <div id="evtitle"></div><div id="evsub"></div><div id="evtext"></div>
   <div class="hbar evbar"><i id="evfill"></i></div><div id="evinfo"></div>
 </div></div>
+<div id="mgbox"><div class="mgcard">
+  <div class="mghead"><b id="mgname"></b><span id="mgstat"></span><button id="mgquit" class="tbtn" type="button">ESC</button></div>
+  <canvas id="mgcv" width="480" height="320"></canvas><div id="mghint"></div>
+</div></div>
+<div id="mginvite"><div id="mgitxt"></div><div><button id="mgyes" class="tbtn" type="button"></button><button id="mgno" class="tbtn" type="button"></button></div></div>
 <div id="errflash"></div>
 <div id="app">
   <div id="main">
@@ -810,7 +822,7 @@ const ALIASES = {
   ajuda: 'help', loja: 'store', shop: 'store', comprar: 'buy', tarefas: 'farm',
   limpar: 'clear', historico: 'history', idioma: 'lang',
   config: 'settings', configuracoes: 'settings', varredura: 'scan',
-  quem: 'whoami', rastro: 'trace', nome: 'name', reiniciar: 'reset', hw: 'hardware', pecas: 'hardware', upgrades: 'hardware', prestigio: 'prestige', temas: 'themes', conquistas: 'achievements', missoes: 'achievements', missions: 'achievements', ach: 'achievements', perk: 'perks', vantagens: 'perks', renascer: 'prestige',
+  quem: 'whoami', rastro: 'trace', nome: 'name', reiniciar: 'reset', hw: 'hardware', pecas: 'hardware', upgrades: 'hardware', prestigio: 'prestige', temas: 'themes', mini: 'minigame', arcade: 'minigame', conquistas: 'achievements', missoes: 'achievements', missions: 'achievements', ach: 'achievements', perk: 'perks', vantagens: 'perks', renascer: 'prestige',
 };
 
 /* =========================================================
@@ -847,7 +859,7 @@ const state = {
   // WPM: média só enquanto está em FARM; fora dele o valor exibido decai
   wpmView: 0, farmStart: 0, farmChars: 0, farmAvg: 0, farmEnter: 0,
   // >>> Estatísticas persistentes (painel da esquerda). Adicione novos contadores aqui.
-  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0, evWins: 0, evLoss: 0 },
+  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0, evWins: 0, evLoss: 0, mgPlays: 0 },
 };
 
 function saveGame(){
@@ -1195,6 +1207,7 @@ const SYSTEM_COMMANDS = {
       ['perks [id]', 'bônus permanentes comprados com pontos de prestige (lista ou compra)', 'permanent bonuses bought with prestige points (list or buy)'],
       ['achievements', 'conquistas e progresso (+2% em tudo cada)', 'achievements and progress (+2% to everything each)'],
       ['event [nome]', 'dispara um evento de teste (eles também surgem sozinhos de tempos em tempos)', 'triggers a test event (they also appear on their own from time to time)'],
+      ['minigame [nome]', 'joga um minigame agora (eles também convidam sozinhos quando você está ativo)', 'plays a minigame now (they also invite you on their own while you are active)'],
       ['history', 'comandos anteriores (↑ ↓ navegam)', 'previous commands (↑ ↓ to browse)'],
       ['clear', 'limpa o terminal', 'clear the terminal'],
       ['whoami', 'seu rank e o que falta para o próximo', 'your rank and what is left for the next'],
@@ -1247,6 +1260,12 @@ const SYSTEM_COMMANDS = {
     if(!id) return print(L2('Eventos: ', 'Events: ') + Object.keys(EVENTS).join(' | ') + L2('   (use: event <nome> para testar)', '   (use: event <name> to test)'), 'dim');
     if(!EVENTS[id]) return print(t('not_found'), 'err');
     if(!evStart(id)) print(L2('Não foi possível iniciar agora.', 'Could not start right now.'), 'err');
+  },
+  minigame(args){
+    const id = (args[0] || '').toLowerCase();
+    if(!id) return print('Minigames: ' + Object.keys(MGAMES).join(' | ') + L2('   (use: minigame <nome> para jogar agora)', '   (use: minigame <name> to play now)'), 'dim');
+    if(!MGAMES[id]) return print(t('not_found'), 'err');
+    if(!mgStart(id)) print(L2('Não dá para jogar agora (há um evento ou outro jogo ativo).', 'Cannot play now (an event or another game is active).'), 'err');
   },
   units(){
     print(L2('=== UNIDADES ===', '=== UNITS ==='));
@@ -2054,6 +2073,7 @@ const ACH = [
   ['parts3', 'Montador', 'Builder', () => PARTS.filter(q => hasPart(q.id)).length, 3], ['themes5', 'Estilista', 'Stylist', () => state.themesOwned.length, 5],
   ['acc98', 'Precisão cirúrgica', 'Surgical accuracy', () => { const tt = state.totalTyped + state.stats.errors; return tt >= 500 ? state.totalTyped / tt * 100 : 0; }, 98],
   ['ev3', 'Firewall humano', 'Human firewall', () => state.stats.evWins, 3],
+  ['mg5', 'Fliperama', 'Arcade', () => state.stats.mgPlays, 5],
   ['off1', 'Bem-vindo de volta', 'Welcome back', () => state.stats.offlines, 1],
 ].map(([id, pt, en, cur, tg, b]) => ({ id, pt, en, cur, tg, b }));
 const achMult = () => 1 + 0.02 * ACH.filter(a => state.stats.ach[a.id]).length;
@@ -2078,7 +2098,7 @@ function tutBoot(){
 // Tick de 1s: revela upgrades, libera pacotes, confere conquistas; auto-installer a cada 0,6s
 let tickAcc = 0, autoT = 0;
 function gameTick(dt){
-  evTick(dt);
+  evTick(dt); mgTick();
   const S = state.stats, al = perkLvl('auto'); autoT += dt;
   if(al && autoT >= .6){ autoT = 0; UPGRADES.slice(0, 3 * al).forEach(u => { if(state.bytes >= cost(u)) doBuy(u, 1, true); }); }
   tickAcc += dt; if(tickAcc < 1) return; tickAcc = 0;
@@ -2107,7 +2127,7 @@ $('offok').addEventListener('click', () => { off.open = false; state.modal = fal
 
 /* ================= VISUAL EXTRA ================= */
 const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);   // respeita "reduzir movimento"
-const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳', BREACH: '⚠', DEFENDED: '✔' };
+const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳', BREACH: '⚠', DEFENDED: '✔', ARCADE: '▶' };
 function toast(txt){                                   // cartão que desliza no canto: conquistas, marcos, rank, peças...
   const parts = String(txt).split(' // '), box = $('toasts'), d = document.createElement('div'), b = document.createElement('b');
   d.className = 'toast'; b.textContent = (TOAST_ICON[parts[0]] || '●') + ' ' + parts[0]; d.appendChild(b); d.appendChild(document.createTextNode(parts.slice(1).join(' // ')));
@@ -2241,7 +2261,7 @@ function evRender(){
   [...tg].forEach((ch, i) => { const sp = document.createElement('span'); sp.textContent = (i < a.pos || !a.mask) ? ch : '•'; sp.className = i < a.pos ? 'ev-ok' : i === a.pos ? 'ev-cur' : 'ev-todo'; box.appendChild(sp); });
 }
 function evStart(id){
-  const def = EVENTS[id]; if(ev.act || state.modal || !def) return false;
+  const def = EVENTS[id]; if(ev.act || state.modal || !def || mg.act || mg.invite) return false;
   const m = def.mk(); ev.act = { id, def, targets: m.targets, idx: 0, pos: 0, errs: 0, miss: 0, hits: 0, total0: m.total || 0, tleft: m.total || 0, per: m.per || 0, pleft: m.per || 0, mask: !!m.mask, beep: 99 };
   $('evtitle').textContent = L2(def.t[0], def.t[1]); $('evsub').textContent = L2(def.d[0], def.d[1]) + (m.extra ? '\n' + L2('Cifrado: ', 'Ciphertext: ') + m.extra : '');
   $('evtext').className = m.big ? 'big' : ''; $('evbox').style.display = 'flex'; document.body.classList.add('alert'); evRender(); playSfx('error'); return true;
@@ -2276,7 +2296,7 @@ function evTick(dt){
   const now = Date.now(); if(state.mods.length) state.mods = state.mods.filter(m => m.until > now);
   const a = ev.act;
   if(!a){
-    if(now > ev.nextAt && state.stats.done >= 3 && !state.modal && !bootOn && !document.hidden){
+    if(now > ev.nextAt && state.stats.done >= 3 && !state.modal && !bootOn && !document.hidden && !mg.act && !mg.invite){
       const ids = Object.keys(EVENTS), tot = ids.reduce((x, i) => x + EVENTS[i].w, 0); let r = Math.random() * tot, k = 0;
       while(k < ids.length - 1 && r > EVENTS[ids[k]].w){ r -= EVENTS[ids[k]].w; k++; }
       evStart(ids[k]);
@@ -2290,6 +2310,140 @@ function evTick(dt){
   if(a.total0 && a.tleft < 5 && Math.ceil(a.tleft) !== a.beep){ a.beep = Math.ceil(a.tleft); playSfx('click', { pitch: 700 }); }
 }
 document.addEventListener('keydown', e => { if(!ev.act) return; e.stopImmediatePropagation(); e.preventDefault(); evKey(e); }, true);   // durante o evento, o teclado é só dele
+
+/* ================= MINIGAMES =================
+   Convidam sozinhos (um por vez, nunca durante um evento e só com o jogador ativo). Para criar outro, adicione em MGAMES. */
+const MG_W = 480, MG_H = 320;
+const mg = { act: null, invite: null, nextAt: Date.now() + 100000 + Math.random() * 60000, actLast: Date.now(), last: 0, cv: $('mgcv'), cx: $('mgcv').getContext('2d') };
+['keydown', 'pointerdown', 'mousemove', 'touchstart'].forEach(tp => addEventListener(tp, () => { mg.actLast = Date.now(); }, { passive: true, capture: true }));   // detecta atividade
+const mgClamp = x => Math.max(16, Math.min(MG_W - 16, x));
+const MGAMES = {
+  meteors: { n: ['Chuva de meteoros', 'Meteor shower'], h: ['Mova a nave com o mouse ou ← →. Ela atira sozinha. 3 vidas.', 'Move the ship with the mouse or ← →. It auto-fires. 3 lives.'], T: 25,
+    init(g){ g.x = MG_W / 2; g.bul = []; g.rk = []; g.sp = 0; g.fire = 0; g.lives = 3; g.extra = '♥♥♥'; },
+    move(g, x){ g.x = mgClamp(x); },
+    key(g, e){ const k = e.key.toLowerCase(); if(k === 'arrowleft' || k === 'a') g.x = mgClamp(g.x - 28); if(k === 'arrowright' || k === 'd') g.x = mgClamp(g.x + 28); },
+    step(g, dt){
+      g.fire -= dt; if(g.fire <= 0){ g.fire = .22; g.bul.push({ x: g.x, y: MG_H - 34 }); }
+      g.sp -= dt; if(g.sp <= 0){ g.sp = Math.max(.35, .8 - (25 - g.left) * .018); const r = 12 + Math.random() * 14; g.rk.push({ x: r + Math.random() * (MG_W - 2 * r), y: -r, r, hp: r > 20 ? 2 : 1, v: 60 + Math.random() * 70 + (25 - g.left) * 2 }); }
+      g.bul.forEach(b => b.y -= 380 * dt); g.rk.forEach(k => k.y += k.v * dt);
+      g.bul.forEach(b => g.rk.forEach(k => { if(!b.dead && k.hp > 0 && Math.hypot(b.x - k.x, b.y - k.y) < k.r + 4){ b.dead = true; k.hp--; if(k.hp <= 0) g.score += k.r > 20 ? 20 : 10; } }));
+      g.bul = g.bul.filter(b => !b.dead && b.y > -10);
+      g.rk.forEach(k => { if(k.hp > 0 && Math.hypot(g.x - k.x, MG_H - 26 - k.y) < k.r + 12){ k.hp = 0; g.lives--; g.extra = '♥'.repeat(Math.max(0, g.lives)); playSfx('error'); if(g.lives <= 0) g.over = true; } });
+      g.rk = g.rk.filter(k => k.hp > 0 && k.y < MG_H + 30);
+    },
+    draw(g, c){
+      c.beginPath(); c.moveTo(g.x, MG_H - 40); c.lineTo(g.x - 14, MG_H - 14); c.lineTo(g.x + 14, MG_H - 14); c.closePath(); c.stroke();
+      g.bul.forEach(b => c.fillRect(b.x - 1.5, b.y, 3, 10));
+      g.rk.forEach(k => { c.beginPath(); for(let i = 0; i < 9; i++){ const a = i / 9 * 6.283, rr = k.r * (.8 + .2 * Math.sin(i * 2.3 + k.r)); c[i ? 'lineTo' : 'moveTo'](k.x + Math.cos(a) * rr, k.y + Math.sin(a) * rr); } c.closePath(); c.stroke(); });
+    }, rate: g => g.score / 260 },
+  targets: { n: ['Tiro ao alvo', 'Target practice'], h: ['Clique nos alvos antes que sumam. Quanto mais rápido, mais pontos.', 'Click the targets before they vanish. Faster = more points.'], T: 20,
+    init(g){ g.tg = []; g.sp = 0; },
+    step(g, dt){ g.sp -= dt; if(g.sp <= 0 && g.tg.length < 3){ g.sp = .55; g.tg.push({ x: 40 + Math.random() * (MG_W - 80), y: 40 + Math.random() * (MG_H - 80), life: 1.5, max: 1.5 }); }
+      g.tg.forEach(t => t.life -= dt); g.tg = g.tg.filter(t => t.life > 0); },
+    rr: t => 12 + 16 * t.life / t.max,
+    down(g, x, y){ const i = g.tg.findIndex(t => Math.hypot(t.x - x, t.y - y) < g.d.rr(t)); if(i >= 0){ g.score += 10 + Math.round(10 * g.tg[i].life / g.tg[i].max); g.tg.splice(i, 1); playSfx('click', { pitch: 500 }); } else g.score = Math.max(0, g.score - 2); },
+    draw(g, c){ g.tg.forEach(t => { const r = g.d.rr(t); [1, .6, .25].forEach(f => { c.beginPath(); c.arc(t.x, t.y, r * f, 0, 7); c.stroke(); }); c.fillRect(t.x - 1, t.y - 1, 3, 3); }); },
+    rate: g => g.score / 300 },
+  bugs: { n: ['Caça-bugs', 'Bug hunt'], h: ['Aperte a tecla da posição do bug (Q W E / A S D / Z X C) ou clique nele.', 'Press the key of the bug position (Q W E / A S D / Z X C) or click it.'], T: 22,
+    init(g){ g.b = []; g.sp = 0; },
+    step(g, dt){ g.sp -= dt; if(g.sp <= 0){ g.sp = Math.max(.35, .7 - (22 - g.left) * .01); const i = Math.floor(Math.random() * 9); if(!g.b.some(b => b.i === i)) g.b.push({ i, life: 1.1 }); }
+      g.b.forEach(b => b.life -= dt); g.b = g.b.filter(b => b.life > 0); },
+    hit(g, i){ const k = g.b.findIndex(b => b.i === i); if(k >= 0){ g.score += 10 + Math.round(g.b[k].life * 8); g.b.splice(k, 1); playSfx('click', { pitch: 600 }); } else g.score = Math.max(0, g.score - 5); },
+    key(g, e){ const i = 'QWEASDZXC'.indexOf(e.key.toUpperCase()); if(i >= 0) g.d.hit(g, i); },
+    down(g, x, y){ g.d.hit(g, Math.floor(y / (MG_H / 3)) * 3 + Math.floor(x / (MG_W / 3))); },
+    draw(g, c){ const cw = MG_W / 3, chh = MG_H / 3;
+      for(let i = 0; i < 9; i++){ const x = (i % 3) * cw, y = Math.floor(i / 3) * chh; c.globalAlpha = .35; c.strokeRect(x + 8, y + 8, cw - 16, chh - 16); c.globalAlpha = .6; c.fillText('QWEASDZXC'[i], x + 14, y + 28); }
+      c.globalAlpha = 1; c.font = '34px monospace'; c.textAlign = 'center'; g.b.forEach(b => c.fillText('🐞', (b.i % 3) * cw + cw / 2, Math.floor(b.i / 3) * chh + chh / 2 + 12)); },
+    rate: g => g.score / 220 },
+  simon: { n: ['Sequência', 'Sequence'], h: ['Repita a sequência com as teclas 1 2 3 4 (ou clique). Cada rodada é mais longa.', 'Repeat the sequence with keys 1 2 3 4 (or click). Each round is longer.'], T: 60,
+    init(g){ g.seq = []; g.ph = 'wait'; g.tm = .8; g.i = 0; g.lit = -1; g.litT = 0; g.round = 0; },
+    step(g, dt){
+      g.tm -= dt;
+      if(g.litT > 0){ g.litT -= dt; if(g.litT <= 0) g.lit = -1; }
+      if(g.ph === 'wait' && g.tm <= 0){ g.seq.push(Math.floor(Math.random() * 4)); g.round++; g.ph = 'show'; g.i = 0; g.tm = .5; g.lit = -1; g.extra = L2('rodada ', 'round ') + g.round; }
+      else if(g.ph === 'show' && g.tm <= 0){
+        if(g.lit >= 0){ g.lit = -1; g.i++; g.tm = .2; if(g.i >= g.seq.length){ g.ph = 'in'; g.i = 0; } }
+        else { g.lit = g.seq[g.i]; g.tm = .45; playSfx('click', { pitch: g.lit * 220 }); }
+      }
+    },
+    press(g, k){ if(g.ph !== 'in' || k < 0 || k > 3) return; g.lit = k; g.litT = .18; playSfx('click', { pitch: k * 220 });
+      if(k === g.seq[g.i]){ g.i++; if(g.i >= g.seq.length){ g.score += g.round * 10; g.ph = 'wait'; g.tm = .6; playSfx('ok'); } } else { g.over = true; playSfx('error'); } },
+    key(g, e){ g.d.press(g, '1234'.indexOf(e.key)); },
+    down(g, x){ g.d.press(g, Math.floor(x / (MG_W / 4))); },
+    draw(g, c){ const w = MG_W / 4;
+      for(let i = 0; i < 4; i++){ c.globalAlpha = g.lit === i ? .85 : .25; c.fillRect(i * w + 10, 90, w - 20, 140); c.globalAlpha = 1; c.strokeRect(i * w + 10, 90, w - 20, 140); c.textAlign = 'center'; c.font = '40px monospace'; c.fillText('◆▲●■'[i], i * w + w / 2, 175); c.font = '14px monospace'; c.fillText(String(i + 1), i * w + w / 2, 255); }
+      c.fillText(g.ph === 'in' ? L2('SUA VEZ', 'YOUR TURN') : L2('observe...', 'watch...'), MG_W / 2, 50); },
+    rate: g => g.score / 280 },
+  catcher: { n: ['Coletor de bytes', 'Byte catcher'], h: ['Mova a cesta (mouse ou ← →). Pegue $ e evite ☠ (tira pontos).', 'Move the basket (mouse or ← →). Catch $ and avoid ☠ (costs points).'], T: 22,
+    init(g){ g.x = MG_W / 2; g.it = []; g.sp = 0; },
+    move(g, x){ g.x = mgClamp(x); },
+    key(g, e){ const k = e.key.toLowerCase(); if(k === 'arrowleft' || k === 'a') g.x = mgClamp(g.x - 32); if(k === 'arrowright' || k === 'd') g.x = mgClamp(g.x + 32); },
+    step(g, dt){ g.sp -= dt; if(g.sp <= 0){ g.sp = .36; g.it.push({ x: 20 + Math.random() * (MG_W - 40), y: -10, v: 100 + Math.random() * 90, bad: Math.random() < .25 }); }
+      g.it.forEach(i => { i.y += i.v * dt; if(!i.got && i.y > MG_H - 36 && i.y < MG_H - 14 && Math.abs(i.x - g.x) < 34){ i.got = true; g.score = Math.max(0, g.score + (i.bad ? -15 : 10)); playSfx(i.bad ? 'error' : 'click', { pitch: 400 }); } });
+      g.it = g.it.filter(i => !i.got && i.y < MG_H + 20); },
+    draw(g, c){ c.strokeRect(g.x - 30, MG_H - 30, 60, 16); c.font = '18px monospace'; c.textAlign = 'center'; g.it.forEach(i => c.fillText(i.bad ? '☠' : '$', i.x, i.y)); },
+    rate: g => g.score / 200 },
+  pulse: { n: ['Pulso certo', 'Perfect pulse'], h: ['Aperte ESPAÇO (ou clique) quando o marcador estiver na zona. 8 rodadas.', 'Press SPACE (or click) when the marker is in the zone. 8 rounds.'], T: 0,
+    init(g){ g.r = 0; g.m = 0; g.dir = 1; g.sp = 1.1; g.zx = .3 + Math.random() * .4; g.zw = .16; g.msg = ''; g.extra = '1/8'; },
+    step(g, dt){ g.m += g.dir * g.sp * dt; if(g.m > 1){ g.m = 1; g.dir = -1; } if(g.m < 0){ g.m = 0; g.dir = 1; } },
+    shoot(g){ const d = Math.abs(g.m - g.zx), sc = d < g.zw * .25 ? 20 : d < g.zw * .5 ? 12 : 0; g.score += sc; g.msg = sc === 20 ? 'PERFECT' : sc ? 'GOOD' : 'MISS'; playSfx(sc ? 'ok' : 'error');
+      g.r++; g.extra = Math.min(8, g.r + 1) + '/8'; if(g.r >= 8) g.over = true; g.sp += .25; g.zw = Math.max(.07, g.zw - .012); g.zx = .15 + Math.random() * .7; },
+    key(g, e){ if(e.key === ' ') g.d.shoot(g); }, down(g){ g.d.shoot(g); },
+    draw(g, c){ const w = MG_W - 60; c.strokeRect(30, 140, w, 30); c.globalAlpha = .35; c.fillRect(30 + (g.zx - g.zw / 2) * w, 140, g.zw * w, 30); c.globalAlpha = 1; c.fillRect(30 + g.m * w - 2, 130, 4, 50);
+      c.textAlign = 'center'; c.font = '28px monospace'; c.fillText(g.msg, MG_W / 2, 100); },
+    rate: g => g.score / 160 },
+};
+const mgPos = e => { const r = mg.cv.getBoundingClientRect(); return [(e.clientX - r.left) * MG_W / r.width, (e.clientY - r.top) * MG_H / r.height]; };
+mg.cv.addEventListener('pointerdown', e => { const g = mg.act; if(g && !g.over && g.d.down) g.d.down(g, ...mgPos(e)); });
+mg.cv.addEventListener('pointermove', e => { const g = mg.act; if(g && !g.over && g.d.move) g.d.move(g, ...mgPos(e)); });
+document.addEventListener('keydown', e => {                    // durante o jogo o teclado é só dele; ESC encerra
+  const g = mg.act; if(!g) return; e.stopImmediatePropagation(); e.preventDefault();
+  if(e.key === 'Escape'){ g.over = true; g.endT = 1; } else if(!g.over && g.d.key) g.d.key(g, e);
+}, true);
+function mgStart(id){
+  const d = MGAMES[id]; if(!d || mg.act || ev.act || state.modal) return false;
+  mg.invite = null; $('mginvite').style.display = 'none';
+  const g = { id, d, left: d.T || 0, score: 0, over: false, endT: 0, extra: '' }; d.init(g); mg.act = g;
+  $('mgname').textContent = L2(d.n[0], d.n[1]); $('mghint').textContent = L2(d.h[0], d.h[1]); $('mgbox').style.display = 'flex'; mg.last = performance.now(); requestAnimationFrame(mgLoop); return true;
+}
+function mgLoop(now){
+  const g = mg.act; if(!g) return;
+  const dt = Math.min(.05, (now - mg.last) / 1000), c = mg.cx; mg.last = now;
+  if(!g.over){ g.d.step(g, dt); if(g.d.T){ g.left -= dt; if(g.left <= 0) g.over = true; } }
+  c.globalAlpha = 1; c.textAlign = 'left'; c.font = '14px monospace'; c.shadowBlur = 0; c.clearRect(0, 0, MG_W, MG_H); c.fillStyle = '#030303'; c.fillRect(0, 0, MG_W, MG_H);
+  c.strokeStyle = c.fillStyle = spin.fg; c.lineWidth = 1.5; c.shadowColor = spin.fg; c.shadowBlur = 6;
+  g.d.draw(g, c);
+  c.shadowBlur = 0; c.globalAlpha = 1; c.textAlign = 'center'; c.font = '28px monospace'; if(g.over) c.fillText(L2('FIM!', 'GAME OVER'), MG_W / 2, MG_H / 2);
+  $('mgstat').textContent = L2('pontos ', 'score ') + g.score + (g.d.T ? '   ' + Math.ceil(Math.max(0, g.left)) + 's' : '') + (g.extra ? '   ' + g.extra : '');
+  if(g.over){ g.endT += dt; if(g.endT > 1) return mgEnd(); }
+  requestAnimationFrame(mgLoop);
+}
+function mgEnd(){
+  const g = mg.act; if(!g) return; mg.act = null; $('mgbox').style.display = 'none';
+  const rt = Math.max(0, Math.min(1, g.d.rate(g))), gain = rt * 90 * Math.max(bps(), perChar() * 3), S = state.stats;   // até 90 s de ganho idle
+  S.mgPlays++; if(gain > 0){ state.bytes += gain; spinAdd(gain, IDLE_W); }
+  if(rt >= .85) state.mods.push({ kind: 'all', mult: 1.2, label: 'HIGH SCORE', until: Date.now() + 30000 });
+  const txt = L2(g.d.n[0], g.d.n[1]) + ': ' + g.score + ' pts  +' + fmtB(gain) + (rt >= .85 ? '  |  HIGH SCORE x1.2 30s' : '');
+  toast('ARCADE // ' + txt); print('[ARCADE] ' + txt, 'warn'); logEvent('arcade ' + g.id + ' ' + g.score); playSfx('ok'); fxEvent('waves', rt > .5 ? 2 : 1);
+  mg.nextAt = Date.now() + 120000 + Math.random() * 120000; saveGame();
+}
+function mgClearInvite(wait){ mg.invite = null; $('mginvite').style.display = 'none'; mg.nextAt = Date.now() + wait + Math.random() * 60000; }
+function mgOffer(){
+  const ids = Object.keys(MGAMES), id = ids[Math.floor(Math.random() * ids.length)], d = MGAMES[id];
+  mg.invite = { id, until: Date.now() + 15000 };
+  $('mgitxt').textContent = L2(`◆ MINIGAME: ${d.n[0]} — valendo bytes!`, `◆ MINIGAME: ${d.n[1]} — bytes up for grabs!`);
+  $('mgyes').textContent = L2('JOGAR', 'PLAY'); $('mgno').textContent = L2('AGORA NÃO', 'NOT NOW'); $('mginvite').style.display = 'block'; playSfx('ok');
+}
+$('mgyes').addEventListener('click', () => { if(mg.invite) mgStart(mg.invite.id); });
+$('mgno').addEventListener('click', () => mgClearInvite(90000));
+$('mgquit').addEventListener('click', () => { if(mg.act){ mg.act.over = true; mg.act.endT = 1; } });
+function mgTick(){            // convida só se o jogador estiver ATIVO e não houver evento nem outro minigame
+  const now = Date.now(), active = now - mg.actLast < 15000;
+  if(mg.invite){ if(now > mg.invite.until || !active || ev.act) mgClearInvite(60000); return; }
+  if(mg.act) return;
+  if(!active){ mg.nextAt = Math.max(mg.nextAt, now + 8000); return; }           // inativo: nada acontece; ao voltar, espera um pouco
+  if(now > mg.nextAt && !ev.act && !state.modal && !bootOn && !document.hidden && state.stats.done >= 3) mgOffer();
+}
 
 /* ---- Prestige: reinstala o sistema em troca de root keys ---- */
 function doPrestige(){
