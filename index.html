@@ -228,6 +228,9 @@ body.alert::before{opacity:.9;animation:hpulse .5s ease-in-out infinite;box-shad
 #mghint{margin-top:6px;opacity:.8;font-size:.85em}
 #mginvite{display:none;position:fixed;right:14px;bottom:14px;z-index:8;border:var(--bw) var(--bs) var(--fg);background:var(--bg);padding:10px 14px;box-shadow:0 0 18px rgba(var(--glow),.6);animation:tin .35s cubic-bezier(.2,1.4,.4,1)}
 #mginvite div+div{margin-top:8px;display:flex;gap:8px}
+#evtext.plain{white-space:pre;text-align:left;font-size:1em;line-height:1.5}
+body.blackout #term{filter:blur(1.1px) contrast(1.5);animation:bo .12s steps(2) infinite}
+@keyframes bo{50%{transform:translateX(1px)}}
 </style>
 </head>
 <body>
@@ -822,7 +825,7 @@ const ALIASES = {
   ajuda: 'help', loja: 'store', shop: 'store', comprar: 'buy', tarefas: 'farm',
   limpar: 'clear', historico: 'history', idioma: 'lang',
   config: 'settings', configuracoes: 'settings', varredura: 'scan',
-  quem: 'whoami', rastro: 'trace', nome: 'name', reiniciar: 'reset', hw: 'hardware', pecas: 'hardware', upgrades: 'hardware', prestigio: 'prestige', temas: 'themes', mini: 'minigame', arcade: 'minigame', conquistas: 'achievements', missoes: 'achievements', missions: 'achievements', ach: 'achievements', perk: 'perks', vantagens: 'perks', renascer: 'prestige',
+  quem: 'whoami', rastro: 'trace', nome: 'name', reiniciar: 'reset', hw: 'hardware', pecas: 'hardware', upgrades: 'hardware', prestigio: 'prestige', temas: 'themes', eventos: 'evlog', mini: 'minigame', arcade: 'minigame', conquistas: 'achievements', missoes: 'achievements', missions: 'achievements', ach: 'achievements', perk: 'perks', vantagens: 'perks', renascer: 'prestige',
 };
 
 /* =========================================================
@@ -859,7 +862,7 @@ const state = {
   // WPM: média só enquanto está em FARM; fora dele o valor exibido decai
   wpmView: 0, farmStart: 0, farmChars: 0, farmAvg: 0, farmEnter: 0,
   // >>> Estatísticas persistentes (painel da esquerda). Adicione novos contadores aqui.
-  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0, evWins: 0, evLoss: 0, mgPlays: 0 },
+  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0, evWins: 0, evLoss: 0, mgPlays: 0, lastDay: '', streak: 0, evHist: [] },
 };
 
 function saveGame(){
@@ -938,7 +941,7 @@ const PARTS = [
 ].map(([id, name, kind, v, cost]) => ({ id, name, kind, v, cost }));
 const hasPart = id => !!(state.stats.parts && state.stats.parts[id]);
 const partMult = kind => PARTS.reduce((m, p) => p.kind === kind && hasPart(p.id) ? m * p.v : m, 1);
-const discMult = () => partMult('disc');
+const discMult = () => partMult('disc') * modMult('cost');
 const presMult = () => 1 + 0.1 * (state.stats.rk || 0);                 // +10% em tudo por root key
 const RK_BASE = 64 * MB;                                               // ganho da run p/ a 1ª root key
 const rkGain = () => Math.floor(Math.sqrt(Math.max(0, state.stats.runEarned || 0) / RK_BASE) * partMult('rk'));
@@ -1208,6 +1211,7 @@ const SYSTEM_COMMANDS = {
       ['achievements', 'conquistas e progresso (+2% em tudo cada)', 'achievements and progress (+2% to everything each)'],
       ['event [nome]', 'dispara um evento de teste (eles também surgem sozinhos de tempos em tempos)', 'triggers a test event (they also appear on their own from time to time)'],
       ['minigame [nome]', 'joga um minigame agora (eles também convidam sozinhos quando você está ativo)', 'plays a minigame now (they also invite you on their own while you are active)'],
+      ['evlog', 'histórico dos eventos e taxa de acerto', 'event history and win rate'],
       ['history', 'comandos anteriores (↑ ↓ navegam)', 'previous commands (↑ ↓ to browse)'],
       ['clear', 'limpa o terminal', 'clear the terminal'],
       ['whoami', 'seu rank e o que falta para o próximo', 'your rank and what is left for the next'],
@@ -1266,6 +1270,12 @@ const SYSTEM_COMMANDS = {
     if(!id) return print('Minigames: ' + Object.keys(MGAMES).join(' | ') + L2('   (use: minigame <nome> para jogar agora)', '   (use: minigame <name> to play now)'), 'dim');
     if(!MGAMES[id]) return print(t('not_found'), 'err');
     if(!mgStart(id)) print(L2('Não dá para jogar agora (há um evento ou outro jogo ativo).', 'Cannot play now (an event or another game is active).'), 'err');
+  },
+  evlog(){
+    const S = state.stats, h = S.evHist || [], tot = S.evWins + S.evLoss;
+    print(L2(`=== EVENTOS === vitórias ${S.evWins} | derrotas ${S.evLoss} | taxa ${tot ? Math.round(S.evWins / tot * 100) : 0}%`, `=== EVENTS === wins ${S.evWins} | losses ${S.evLoss} | rate ${tot ? Math.round(S.evWins / tot * 100) : 0}%`));
+    h.slice().reverse().forEach(x => print(`  ${new Date(x.t).toTimeString().slice(0, 8)}  ${x.id.padEnd(11)} ${x.r === 1 ? 'OK' : x.r === 0 ? L2('FALHA', 'FAIL') : '-'}`, 'dim'));
+    if(!h.length) print(L2('(nenhum evento ainda)', '(no events yet)'), 'dim');
   },
   units(){
     print(L2('=== UNIDADES ===', '=== UNITS ==='));
@@ -1627,6 +1637,7 @@ function completeCommand(){
   playSfx('ok');
   let gain = state.cmd.reward * comboMult(), tag = '';
   if(state.lineErr === 0){ gain *= 1.25; state.stats.perfects++; tag = ' PERFECT'; }                       // linha perfeita: +25%
+  if(state.luckyLines > 0){ gain *= 2; state.luckyLines--; tag += ' ★LUCKY'; }                              // maré de sorte
   if(state.cmd.gold){ gain += Math.max(state.cmd.reward * 5, bps() * 120); state.stats.golds++; tag += ' ★GOLD';   // dourada: 5x ou 2 min de idle
     fxEvent('banner', 'GOLDEN LINE // +' + fmtB(gain)); fxEvent('waves', 3); }
   state.bytes += gain; state.combo++; spinAdd(gain, 1, 1.2); fxEvent('done', gain); state.stats.done++; state.stats.maxCombo = Math.max(state.stats.maxCombo, state.combo); logEvent(`farm +${fmtB(gain)} (x${comboMult().toFixed(1)})`);
@@ -1810,7 +1821,7 @@ function updateHud(dt){
   hud.last = tg;
   const tx = fmtB(hud.shown).split(' '); hudNum.textContent = tx[0];
   if(tx[1] !== hud.unit){ hud.unit = tx[1]; hudUnit.textContent = tx[1]; const ui = UNIT_LIST.indexOf(tx[1]);
-    if(hud.unitSet){ hudAnim(hudBal, 'hb-pop'); if(ui > hud.uiMax){ hud.uiMax = ui; fxEvent('waves', 3); playSfx('ok'); } }   // fanfarra: nova unidade
+    if(hud.unitSet){ hudAnim(hudBal, 'hb-pop'); if(ui > hud.uiMax){ hud.uiMax = ui; fxEvent('waves', 3); playSfx('ok'); if(ui >= 2) setTimeout(() => evStart('boss'), 3000); } }   // novo marco de unidade: chefe   // fanfarra: nova unidade
     else hud.uiMax = ui;
     hud.unitSet = true; }
   hudIdle.textContent = fmtB(bps()) + '/s';
@@ -1825,7 +1836,8 @@ function updateHud(dt){
   comboFill.style.width = Math.min(100, (cm - 1) / Math.max(1, cap - 1) * 100) + '%';
   document.body.classList.toggle('hot', cm >= 3 && cm < 5); document.body.classList.toggle('fire', cm >= 5);
   const bf = [], pn = [], nowM = Date.now();                                  // bônus e penalidades ativos
-  state.mods.forEach(m => { const ln = (m.mult < 1 ? '▼ ' : '▲ ') + m.label + ' x' + m.mult + ' ' + ({ idle: 'idle', type: L2('digit.', 'typing'), all: L2('tudo', 'all') })[m.kind] + ' (' + fmtEta((m.until - nowM) / 1000) + ')'; (m.mult < 1 ? pn : bf).push(ln); });
+  state.mods.forEach(m => { const bad = m.kind === 'cost' ? m.mult > 1 : m.mult < 1, ln = (bad ? '▼ ' : '▲ ') + m.label + ' x' + m.mult + ' ' + ({ idle: 'idle', type: L2('digit.', 'typing'), all: L2('tudo', 'all'), cost: L2('custo', 'cost') })[m.kind] + ' (' + fmtEta((m.until - nowM) / 1000) + ')'; (bad ? pn : bf).push(ln); });
+  if(state.luckyLines > 0) bf.push('▲ ' + L2('MARÉ DE SORTE: linhas x2 (', 'LUCKY TIDE: lines x2 (') + state.luckyLines + ')');
   hudBuff.textContent = bf.join('\n'); hudPen.textContent = pn.join('\n');
   hud.idleT += dt;
   if(hud.idleT >= 1){ hud.idleT = 0; if(bps() > 0){ hudFloat('+' + fmtB(bps()), 'idle'); hudAnim($('hudrate'), 'hb-tick'); } }   // pulso a cada segundo
@@ -2056,6 +2068,7 @@ const upPower = u => { const n = state.owned[u.id] || 0; return u.value * n * Ma
 // Perks (comprados com pontos de prestige)
 const perkLvl = id => (state.stats.perks && state.stats.perks[id]) || 0;
 const PERKS = [
+  { id: 'ins', max: 4, cost: l => l + 1, n: ['Seguro cibernético', 'Cyber insurance'], d: l => L2(`penalidades ${15 * l}% mais curtas`, `penalties ${15 * l}% shorter`) },
   { id: 'start', max: 5, cost: l => l,     n: ['Cache de boot', 'Boot cache'],            d: l => L2(`começa cada run com ${fmtB(100 * KB * Math.pow(10, l - 1))}`, `start each run with ${fmtB(100 * KB * Math.pow(10, l - 1))}`) },
   { id: 'off',   max: 4, cost: l => l,     n: ['Daemons persistentes', 'Persistent daemons'], d: l => L2(`offline: limite ${2 + 2 * l}h, eficiência ${50 + 10 * l}%`, `offline: ${2 + 2 * l}h cap, ${50 + 10 * l}% efficiency`) },
   { id: 'combo', max: 5, cost: l => l,     n: ['Buffer de combo', 'Combo buffer'],        d: l => L2(`+${l} no combo máximo`, `+${l} max combo`) },
@@ -2127,7 +2140,7 @@ $('offok').addEventListener('click', () => { off.open = false; state.modal = fal
 
 /* ================= VISUAL EXTRA ================= */
 const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);   // respeita "reduzir movimento"
-const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳', BREACH: '⚠', DEFENDED: '✔', ARCADE: '▶' };
+const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳', BREACH: '⚠', DEFENDED: '✔', ARCADE: '▶', EVENT: '◈' };
 function toast(txt){                                   // cartão que desliza no canto: conquistas, marcos, rank, peças...
   const parts = String(txt).split(' // '), box = $('toasts'), d = document.createElement('div'), b = document.createElement('b');
   d.className = 'toast'; b.textContent = (TOAST_ICON[parts[0]] || '●') + ' ' + parts[0]; d.appendChild(b); d.appendChild(document.createTextNode(parts.slice(1).join(' // ')));
@@ -2240,11 +2253,24 @@ const EV_WORDS = ['FIREWALL', 'PAYLOAD', 'ROOTKIT', 'KERNEL', 'PROXY', 'BACKDOOR
 const evPick = a => a[Math.floor(Math.random() * a.length)];
 const caesar = (w, k) => [...w].map(c => String.fromCharCode((c.charCodeAt(0) - 65 + k) % 26 + 65)).join('');
 state.mods = [];                                            // bônus/penalidades temporários {kind, mult, label, until}
-const modMult = kind => state.mods.reduce((m, x) => (x.kind === kind || x.kind === 'all') ? m * x.mult : m, 1);
+const modMult = kind => state.mods.reduce((m, x) => (x.kind === kind || (x.kind === 'all' && kind !== 'cost')) ? m * x.mult : m, 1);
+state.luckyLines = 0;
+const EV_SHORT = ['ping', 'sync', 'root', 'sudo', 'ssh', 'http', 'port', 'node', 'bash', 'kill', 'curl', 'grep', 'cron', 'tcp', 'udp', 'dns', 'bin', 'tmp', 'log', 'key'];
+const EV_PW = ['PROXY', 'TOKEN', 'CRACK', 'ADMIN', 'LOGIN', 'PATCH', 'SHELL', 'BYTES', 'CACHE', 'VIRUS', 'ROUTE', 'BLOCK', 'CLOUD', 'EMAIL', 'DEBUG', 'QUERY'];
+const EV_LEGIT = [['rh@empresa.com', 'Holerite de outubro disponível', 'https://intranet.empresa.com/holerite'], ['no-reply@github.com', 'Novo login detectado no seu dispositivo', 'https://github.com/settings/security'], ['noreply@google.com', 'Alerta de segurança: nova sessão', 'https://myaccount.google.com/notifications'], ['ti@empresa.com', 'Manutenção programada no sábado', 'https://intranet.empresa.com/avisos'], ['billing@aws.amazon.com', 'Sua fatura de setembro', 'https://console.aws.amazon.com/billing']];
+const EV_PHISH = [['suporte@banc0-seguro.co', 'URGENTE: sua conta será bloqueada em 24h', 'http://b4nco-login.ru/verify'], ['premio@sorteio-vip.xyz', 'Você ganhou um iPhone! Clique agora', 'http://bit.ly/3xFreePr1ze'], ['ceo@empresa-corp.net', 'Preciso de um favor urgente: compre gift cards', 'http://empresa-corp.net/gift'], ['security@paypa1.com', 'Confirme sua senha imediatamente', 'http://paypa1-secure.com/login'], ['no-reply@netfIix.help', 'Pagamento recusado: atualize o cartão', 'http://netfIix-billing.help/card']];
+function evScore(g, p){ const r = Array(5).fill('n'), cnt = {}; for(let i = 0; i < 5; i++){ if(g[i] === p[i]) r[i] = 'g'; else cnt[p[i]] = (cnt[p[i]] || 0) + 1; } for(let i = 0; i < 5; i++) if(r[i] === 'n' && cnt[g[i]] > 0){ r[i] = 'y'; cnt[g[i]]--; } return r; }
+function evCrackShow(a){
+  const rows = a.rows.map(([g, sc]) => [...g].map((ch, i) => sc[i] === 'g' ? '[' + ch + ']' : sc[i] === 'y' ? '(' + ch + ')' : ' ' + ch + ' ').join(''));
+  while(rows.length < 6) rows.push(rows.length === a.rows.length ? ' ' + a.cur.padEnd(5, '_').split('').join('  ') : ' _  _  _  _  _');
+  $('evtext').textContent = rows.join('\n');
+}
+function phShow(a){ const m = a.mails[a.i].m; $('evtext').textContent = `${L2('De', 'From')}:     ${m[0]}\n${L2('Assunto', 'Subject')}: ${m[1]}\nLink:    ${m[2]}\n\n[1] ${L2('legítimo', 'legit')}     [2] phishing`; }
+function phNext(a){ a.i++; a.left = 8; if(a.err > 1) return evEnd(false); if(a.i >= 5) return evEnd(true); phShow(a); }
 const EVENTS = {
   intrusion: { w: 3, errPen: 1.5, t: ['⚠ INTRUSÃO DETECTADA ⚠', '⚠ INTRUSION DETECTED ⚠'], d: ['Um invasor está no sistema! Digite o bloco inteiro antes que o tempo acabe.', 'An intruder is in the system! Type the whole block before time runs out.'],
-    mk(){ const b = evPick(EV_BLOCKS); return { targets: [b], total: Math.max(28, b.length / 3.2) }; },
-    win: { secs: 180, mods: [['all', 1.5, 60, 'FIREWALL UP']] }, lose: { mods: [['idle', .4, 120, 'RANSOMWARE']] } },
+    mk(){ const b = evPick(EV_BLOCKS); return { targets: [b], total: Math.max(22, b.length / Math.min(5, 3.2 + .15 * (state.stats.prestiges || 0))) }; },   // mais apertado a cada prestige
+    win: { secs: 180, mods: [['all', 1.5, 60, 'FIREWALL UP']] }, lose: { mods: [['idle', .4, 120, 'RANSOMWARE']] }, chain: { p: .35, id: 'intrusion2' } },
   captcha: { w: 2, ci: true, maxErr: 3, t: ['◆ CAPTCHA DE SEGURANÇA ◆', '◆ SECURITY CAPTCHA ◆'], d: ['Prove que você é humano: digite o código (3 erros e você é bloqueado).', 'Prove you are human: type the code (3 mistakes and you are locked out).'],
     mk(){ const al = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return { targets: [Array.from({ length: 6 }, () => al[Math.floor(Math.random() * al.length)]).join('')], total: 10 }; },
     win: { secs: 60 }, lose: { mods: [['all', .7, 60, 'LOCKOUT']] } },
@@ -2254,6 +2280,100 @@ const EVENTS = {
   keyrush: { w: 2, ci: true, advance: true, t: ['◆ KEY RUSH ◆', '◆ KEY RUSH ◆'], d: ['Aperte cada letra assim que aparecer (máx. 2 falhas em 10).', 'Hit each letter as soon as it appears (max 2 misses in 10).'],
     mk(){ return { targets: Array.from({ length: 10 }, () => evPick([...'ASDFJKLQWERUIOP'])), per: 1.6, big: true }; },
     win: { secs: 60, mods: [['all', 1.3, 60, 'OVERCLOCK']] }, lose: { mods: [['idle', .6, 60, 'LAG SPIKE']] } },
+  intrusion2: { w: 0, errPen: 1.5, t: ['⚠ SEGUNDA ONDA! ⚠', '⚠ SECOND WAVE! ⚠'], d: ['O invasor voltou com reforços! Dois blocos, tempo apertado.', 'The intruder is back with reinforcements! Two blocks, tight timing.'],
+    mk(){ const b = evPick(EV_BLOCKS), c = evPick(EV_BLOCKS); return { targets: [b, c], total: Math.max(36, (b.length + c.length) / 3.8) }; },
+    win: { secs: 420, mods: [['all', 2, 60, 'FORTRESS']] }, lose: { mods: [['idle', .3, 150, 'RANSOMWARE+']] } },
+  boss: { w: 1, errPen: 0, t: ['☠ SERVIDOR CHEFE ☠', '☠ BOSS SERVER ☠'], d: ['Cada linha digitada causa dano. Derrube o servidor antes que o tempo acabe!', 'Every typed line deals damage. Take the server down before time runs out!'], wt: ['Servidor derrotado!', 'Server destroyed!'], lt: ['O servidor resistiu!', 'The server held!'],
+    mk(){ const pl = CODE_LINES.filter(l => l.length > 18 && l.length < 52), pool = pl.length ? pl : CODE_LINES; return { targets: Array.from({ length: 6 }, () => evPick(pool)), total: 75 }; },
+    info: a => 'BOSS HP ' + (a.targets.length - a.hits) + '/' + a.targets.length,
+    win: { secs: 300, mods: [['all', 1.5, 90, 'BOSS LOOT']] }, lose: { mods: [['idle', .6, 90, 'DAMAGED']] } },
+  airdrop: { w: 2, ci: true, maxErr: 2, soft: true, t: ['◈ AIRDROP DETECTADO ◈', '◈ AIRDROP DETECTED ◈'], d: ['Digite o código antes que alguém roube!', 'Type the code before someone steals it!'], wt: ['Airdrop resgatado!', 'Airdrop claimed!'], lt: ['Você perdeu o airdrop.', 'You missed the airdrop.'],
+    mk(){ const al = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; return { targets: [Array.from({ length: 4 }, () => al[Math.floor(Math.random() * al.length)]).join('')], total: 6, big: true }; },
+    win: { secs: 150 }, lose: {} },
+  ddos: { w: 2, t: ['⚠ ATAQUE DDoS ⚠', '⚠ DDoS ATTACK ⚠'], d: ['Pacotes chegando! Digite cada palavra para bloqueá-la. Se a carga chegar a 100%, o servidor cai. Aguente 30 s.', 'Packets incoming! Type each word to block it. If load hits 100% the server goes down. Survive 30 s.'], wt: ['DDoS mitigado!', 'DDoS mitigated!'], lt: ['Servidor derrubado!', 'Server taken down!'],
+    mk: () => ({ targets: [''] }),
+    init(a){ a.q = []; a.sp = 0; a.load = 0; a.left = 30; a.buf = ''; a.cleared = 0; $('evtext').className = 'plain'; },
+    key(a, e){ if(e.key.length !== 1) return; const nb = a.buf + e.key.toLowerCase(), hit = a.q.findIndex(w => w.t === nb);
+      if(hit >= 0){ a.q.splice(hit, 1); a.cleared++; a.buf = ''; playSfx('click', { pitch: 600 }); } else if(a.q.some(w => w.t.startsWith(nb))) a.buf = nb; else { a.buf = ''; playSfx('error'); } },
+    tick(a, dt){ a.left -= dt; a.sp -= dt;
+      if(a.sp <= 0 && a.q.length < 6){ a.sp = Math.max(.6, 1.3 - (30 - a.left) * .02); a.q.push({ t: evPick(EV_SHORT), life: 4.5 }); }
+      a.q.forEach(w => w.life -= dt); a.q = a.q.filter(w => { if(w.life <= 0){ a.load += 14; playSfx('error'); return false; } return true; }); a.load = Math.max(0, a.load - dt * 1.5);
+      if(a.load >= 100) return evEnd(false); if(a.left <= 0) return evEnd(true);
+      $('evtext').textContent = a.q.map(w => w.t.padEnd(7) + '█'.repeat(Math.ceil(w.life * 2))).join('\n') || '...';
+      $('evfill').style.width = a.load + '%'; $('evinfo').textContent = `${L2('carga', 'load')} ${Math.round(a.load)}%   ${L2('bloqueados', 'blocked')} ${a.cleared}   > ${a.buf}   ${Math.ceil(a.left)}s`; },
+    win: { secs: 120 }, lose: { mods: [['idle', .5, 90, 'SERVER OVERLOAD']] } },
+  phish: { w: 2, t: ['✉ CAÇA AO PHISHING ✉', '✉ PHISHING HUNT ✉'], d: ['Aperte 1 para e-mail LEGÍTIMO ou 2 para PHISHING. Máx. 1 erro em 5.', 'Press 1 for a LEGIT email or 2 for PHISHING. Max 1 mistake in 5.'], wt: ['Phishing neutralizado!', 'Phishing neutralized!'], lt: ['Você caiu no golpe!', 'You fell for it!'],
+    mk: () => ({ targets: [''] }),
+    init(a){ const lg = EV_LEGIT.slice(), ph = EV_PHISH.slice(); a.mails = Array.from({ length: 5 }, () => { const bad = Math.random() < .5, src = bad ? ph : lg; return { m: src.splice(Math.floor(Math.random() * src.length), 1)[0], bad }; }); a.i = 0; a.err = 0; a.left = 8; $('evtext').className = 'plain'; phShow(a); },
+    key(a, e){ if(e.key !== '1' && e.key !== '2') return; const ok = (e.key === '2') === a.mails[a.i].bad; if(!ok) a.err++; playSfx(ok ? 'click' : 'error', { pitch: 500 }); phNext(a); },
+    tick(a, dt){ a.left -= dt; if(a.left <= 0){ a.err++; phNext(a); if(!ev.act) return; } $('evfill').style.width = a.left / 8 * 100 + '%'; $('evinfo').textContent = `e-mail ${Math.min(5, a.i + 1)}/5   ${L2('erros', 'errors')} ${a.err}/1   ${Math.ceil(a.left)}s`; },
+    win: { secs: 120, mods: [['all', 1.2, 45, 'SAFE INBOX']] }, lose: { mods: [['all', .75, 90, 'CREDENTIALS LEAKED']] } },
+  crack: { w: 2, t: ['◆ QUEBRA DE SENHA ◆', '◆ PASSWORD CRACK ◆'], d: ['Descubra a senha de 5 letras em 6 tentativas. [X] = letra e posição certas, (x) = existe em outro lugar. ENTER envia, BACKSPACE apaga.', 'Find the 5-letter password in 6 tries. [X] = right letter and spot, (x) = exists elsewhere. ENTER submits, BACKSPACE erases.'], wt: ['Senha quebrada!', 'Password cracked!'], lt: ['Conta bloqueada!', 'Account locked!'],
+    mk: () => ({ targets: [''] }),
+    init(a){ a.pw = evPick(EV_PW); a.rows = []; a.cur = ''; a.left = 75; $('evtext').className = 'plain'; evCrackShow(a); },
+    key(a, e){
+      if(e.key === 'Backspace') a.cur = a.cur.slice(0, -1);
+      else if(e.key === 'Enter'){ if(a.cur.length === 5){ a.rows.push([a.cur, evScore(a.cur, a.pw)]); if(a.cur === a.pw) return evEnd(true); a.cur = ''; if(a.rows.length >= 6) return evEnd(false); playSfx('click', { pitch: 300 }); } }
+      else if(/^[a-z]$/i.test(e.key) && a.cur.length < 5) a.cur += e.key.toUpperCase();
+      evCrackShow(a); },
+    tick(a, dt){ a.left -= dt; if(a.left <= 0) return evEnd(false); $('evfill').style.width = a.left / 75 * 100 + '%'; $('evinfo').textContent = `${L2('tentativas', 'tries')} ${a.rows.length}/6   ${Math.ceil(a.left)}s`; },
+    win: { secs: 160 }, lose: { mods: [['all', .75, 60, 'ACCOUNT LOCKED']] } },
+  worm: { w: 2, t: ['☣ WORM ESPALHANDO ☣', '☣ WORM SPREADING ☣'], d: ['Digite o código de um nó infectado {abc} para isolá-lo. Com 6 infectados você perde. Sobreviva 25 s.', 'Type the code of an infected node {abc} to isolate it. With 6 infected you lose. Survive 25 s.'], wt: ['Worm contido!', 'Worm contained!'], lt: ['Rede infectada!', 'Network infected!'],
+    mk: () => ({ targets: [''] }),
+    init(a){ const al = 'abcdefghjkmnpqrstuvwxyz'; a.nodes = Array.from({ length: 9 }, () => ({ c: Array.from({ length: 3 }, () => al[Math.floor(Math.random() * al.length)]).join(''), inf: false })); a.nodes[Math.floor(Math.random() * 9)].inf = true; a.sp = 1.4; a.left = 25; a.buf = ''; $('evtext').className = 'plain'; },
+    key(a, e){ if(e.key.length !== 1) return; const nb = a.buf + e.key.toLowerCase(), n = a.nodes.find(x => x.inf && x.c === nb);
+      if(n){ n.inf = false; a.buf = ''; playSfx('click', { pitch: 700 }); } else if(a.nodes.some(x => x.inf && x.c.startsWith(nb))) a.buf = nb; else { a.buf = ''; playSfx('error'); } },
+    tick(a, dt){ a.left -= dt; a.sp -= dt;
+      if(a.sp <= 0){ a.sp = Math.max(.8, 1.5 - (25 - a.left) * .025); const cl = a.nodes.filter(x => !x.inf); if(cl.length) evPick(cl).inf = true; }
+      const ni = a.nodes.filter(x => x.inf).length; if(ni >= 6) return evEnd(false); if(a.left <= 0) return evEnd(true);
+      let tx = ''; a.nodes.forEach((x, i) => { tx += (x.inf ? '{' + x.c + '}' : '[ . ]') + (i % 3 === 2 ? '\n' : '   '); }); $('evtext').textContent = tx;
+      $('evfill').style.width = ni / 6 * 100 + '%'; $('evinfo').textContent = `${L2('infectados', 'infected')} ${ni}/6   > ${a.buf}   ${Math.ceil(a.left)}s`; },
+    win: { secs: 130, mods: [['all', 1.25, 60, 'NETWORK CLEAN']] }, lose: { mods: [['idle', .5, 120, 'INFECTED']] } },
+  ransom: { w: 1, t: ['☠ RANSOMWARE ☠', '☠ RANSOMWARE ☠'], d: ['Seus arquivos foram criptografados! Pague ou lute.', 'Your files were encrypted! Pay or fight.'], wt: ['Ransomware destruído!', 'Ransomware destroyed!'], lt: ['O ransomware venceu.', 'The ransomware won.'], pt: ['Resgate pago.', 'Ransom paid.'],
+    mk: () => ({ targets: [''] }),
+    init(a){ a.phase = 'choice'; a.left = 12; a.cost = state.bytes * .25; $('evtext').className = 'plain'; },
+    key(a, e){
+      if(a.phase === 'choice'){
+        if(e.key === '1'){ state.bytes -= a.cost; return evEnd('pay'); }
+        if(e.key === '2'){ a.phase = 'fight'; const b = evPick(EV_BLOCKS); a.targets = [b]; a.idx = 0; a.pos = 0; a.hits = 0; a.errs = 0; a.total0 = a.tleft = Math.max(22, b.length / 3.4); $('evtext').className = ''; evRender(); }
+        return;
+      }
+      evKeyG(a, e); },
+    tick(a, dt){
+      if(a.phase === 'choice'){ a.left -= dt;
+        $('evtext').textContent = L2(`[1] Pagar o resgate: perde ${fmtB(a.cost)} (25% dos bytes)\n[2] Lutar: digitar o bloco de remoção a tempo\n    vence = recompensa grande | perde = penalidade pesada`, `[1] Pay the ransom: lose ${fmtB(a.cost)} (25% of bytes)\n[2] Fight: type the removal block in time\n    win = big reward | lose = heavy penalty`);
+        $('evfill').style.width = a.left / 12 * 100 + '%'; $('evinfo').textContent = Math.ceil(a.left) + 's'; if(a.left <= 0){ state.bytes -= a.cost; evEnd('pay'); } return; }
+      evTickG(a, dt); },
+    pay: {}, win: { secs: 200 }, lose: { mods: [['idle', .4, 120, 'RANSOMWARE']] } },
+  market: { w: 1, soft: true, t: ['◈ MERCADO NEGRO ◈', '◈ BLACK MARKET ◈'], d: ['Oferta relâmpago! Escolha 1, 2 ou 3 (N recusa). Uma delas é golpe... confira os nomes.', 'Flash deal! Pick 1, 2 or 3 (N declines). One is a scam... check the names.'], wt: ['Negócio fechado!', 'Deal done!'], lt: ['Era golpe!', 'It was a scam!'], pt: ['Você recusou as ofertas.', 'You declined the offers.'],
+    mk: () => ({ targets: [''] }),
+    init(a){ a.scam = Math.floor(Math.random() * 3); a.left = 30; $('evtext').className = 'plain';
+      a.offers = [{ n: 'DARK BOOST', p: .25, mod: ['idle', 2, 90, 'DARK BOOST'] }, { n: 'KEYLOGGER', p: .10, mod: ['type', 1.6, 120, 'KEYLOGGER'] }, { n: 'ZERO-DAY', p: .15, mod: ['all', 1.35, 90, 'ZERO-DAY'] }]; },
+    key(a, e){ const k = e.key.toLowerCase();
+      if(k === 'n') return evEnd('pay');
+      const i = '123'.indexOf(k); if(i < 0) return; const o = a.offers[i]; state.bytes -= state.bytes * o.p;
+      a.res = i === a.scam ? { mods: [['idle', .5, 60, 'SCAM']] } : { mods: [o.mod] }; evEnd(i !== a.scam); },
+    tick(a, dt){ a.left -= dt; if(a.left <= 0) return evEnd('pay'); const kl = { idle: 'idle', type: L2('digitação', 'typing'), all: L2('tudo', 'all') };
+      $('evtext').textContent = a.offers.map((o, i) => `[${i + 1}] ${(i === a.scam ? o.n.replace(/[OAE]/g, c => ({ O: '0', A: '4', E: '3' })[c]) : o.n).padEnd(11)} ${kl[o.mod[0]]} x${o.mod[1]} ${fmtEta(o.mod[2])}   ${L2('custa', 'costs')} ${fmtB(state.bytes * o.p)}`).join('\n');
+      $('evfill').style.width = a.left / 30 * 100 + '%'; $('evinfo').textContent = Math.ceil(a.left) + 's'; },
+    pay: {}, win: {}, lose: {} },
+  rival: { w: 2, errPen: 0, t: ['⚔ HACKER RIVAL ⚔', '⚔ RIVAL HACKER ⚔'], d: ['Um rival digita a mesma linha. Chegue primeiro!', 'A rival types the same line. Get there first!'], wt: ['Você venceu o rival!', 'You beat the rival!'], lt: ['O rival foi mais rápido.', 'The rival was faster.'],
+    mk(){ const pl = CODE_LINES.filter(l => l.length > 24 && l.length < 60); return { targets: [evPick(pl.length ? pl : CODE_LINES)] }; },
+    init(a){ a.cps = Math.max(2.4, avgWpm() * 5 / 60 * (.9 + Math.random() * .2)); a.bot = 0; a.t = 0; evRender(); },
+    key: (a, e) => evKeyG(a, e),
+    tick(a, dt){ a.t += dt; a.bot = a.t * a.cps; const len = a.targets[0].length; if(a.bot >= len) return evEnd(false);
+      $('evfill').style.width = a.bot / len * 100 + '%'; $('evinfo').textContent = `${L2('você', 'you')} ${Math.round(a.pos / len * 100)}%   |   ${L2('rival', 'rival')} ${Math.round(a.bot / len * 100)}%  (${Math.round(a.cps * 12)} WPM)`; },
+    win: { secs: 150, mods: [['all', 1.25, 60, 'RIVAL BEATEN']] }, lose: { mods: [['all', .85, 45, 'DEMORALIZED']] } },
+  news: { w: 2, instant: true, run(){ const good = Math.random() < .55, m = good ? ['idle', 1.5, 120, 'BULL RUN'] : ['cost', 1.2, 120, 'INFLATION'];
+      state.mods.push({ kind: m[0], mult: m[1], label: m[3], until: Date.now() + m[2] * 1000 * (good ? 1 : 1 - .15 * perkLvl('ins')) });
+      const msg = good ? L2('Cripto dispara: ganho idle x1,5 por 2 min', 'Crypto surges: idle income x1.5 for 2 min') : L2('Inflação: upgrades 20% mais caros por 2 min', 'Inflation: upgrades 20% pricier for 2 min');
+      toast('EVENT // ' + msg); print('[NEWS] ' + msg, good ? 'warn' : 'err'); playSfx(good ? 'ok' : 'error'); } },
+  happy: { w: 1, instant: true, run(){ state.mods.push({ kind: 'all', mult: 2, label: 'HAPPY HOUR', until: Date.now() + 120000 }); const msg = L2('Happy hour! Ganhos x2 por 2 minutos', 'Happy hour! Earnings x2 for 2 minutes');
+      toast('EVENT // ' + msg); print('[EVENT] ' + msg, 'warn'); playSfx('ok'); fxEvent('waves', 3); } },
+  lucky: { w: 1, instant: true, run(){ state.luckyLines = 10; const msg = L2('Maré de sorte! As próximas 10 linhas pagam o dobro', 'Lucky tide! The next 10 lines pay double');
+      toast('EVENT // ' + msg); print('[EVENT] ' + msg, 'warn'); playSfx('ok'); fxEvent('waves', 2); } },
+  blackout: { w: 1, instant: true, run(){ state.mods.push({ kind: 'all', mult: 2, label: 'BLACKOUT', until: Date.now() + 20000 }); const msg = L2('Apagão! A tela fica ruidosa, mas tudo paga x2 por 20 s', 'Blackout! The screen gets noisy, but everything pays x2 for 20 s');
+      toast('EVENT // ' + msg); print('[EVENT] ' + msg, 'warn'); fx.glitch = 1; playSfx('error'); } },
 };
 const ev = { act: null, nextAt: Date.now() + 150000 + Math.random() * 90000 };
 function evRender(){
@@ -2262,9 +2382,10 @@ function evRender(){
 }
 function evStart(id){
   const def = EVENTS[id]; if(ev.act || state.modal || !def || mg.act || mg.invite) return false;
+  if(def.instant){ def.run(); ev.nextAt = Date.now() + 180000 + Math.random() * 180000; return true; }       // eventos instantâneos (sem janela)
   const m = def.mk(); ev.act = { id, def, targets: m.targets, idx: 0, pos: 0, errs: 0, miss: 0, hits: 0, total0: m.total || 0, tleft: m.total || 0, per: m.per || 0, pleft: m.per || 0, mask: !!m.mask, beep: 99 };
   $('evtitle').textContent = L2(def.t[0], def.t[1]); $('evsub').textContent = L2(def.d[0], def.d[1]) + (m.extra ? '\n' + L2('Cifrado: ', 'Ciphertext: ') + m.extra : '');
-  $('evtext').className = m.big ? 'big' : ''; $('evbox').style.display = 'flex'; document.body.classList.add('alert'); evRender(); playSfx('error'); return true;
+  $('evtext').className = m.big ? 'big' : ''; $('evbox').style.display = 'flex'; document.body.classList.add('alert'); if(def.init) def.init(ev.act, m); else evRender(); playSfx('error'); return true;
 }
 function evNext(ok){
   const a = ev.act; if(ok) a.hits++; else a.miss++;
@@ -2274,39 +2395,52 @@ function evNext(ok){
   evRender();
 }
 function evKey(e){
-  const a = ev.act; if(!a || e.key.length !== 1 || e.repeat) return;
+  const a = ev.act; if(!a || e.repeat) return;
+  if(a.def.key) return a.def.key(a, e);
+  evKeyG(a, e);
+}
+function evKeyG(a, e){
+  if(e.key.length !== 1) return;
   const tg = a.targets[a.idx], want = tg[a.pos], okk = a.def.ci ? e.key.toUpperCase() === want.toUpperCase() : e.key === want;
   if(okk){ a.pos++; playSfx('click', { pitch: (e.key.charCodeAt(0) % 18) * 40 }); if(a.pos >= tg.length) evNext(true); else evRender(); }
   else { a.errs++; playSfx('error'); if(a.def.errPen) a.tleft -= a.def.errPen; if(a.def.advance) return evNext(false); if(a.def.maxErr && a.errs >= a.def.maxErr) evEnd(false); }
 }
-function evEnd(win){
+function evEnd(win){                         // win: true | false | 'pay' (neutro)
   const a = ev.act; if(!a) return; ev.act = null;
   $('evbox').style.display = 'none'; document.body.classList.remove('alert');
-  const r = win ? a.def.win : a.def.lose, S = state.stats, m0 = (r.mods || [])[0]; let gain = 0;
+  const d = a.def, r = a.res || (win === 'pay' ? d.pay : win ? d.win : d.lose) || {}, S = state.stats, ins = 1 - .15 * perkLvl('ins'); let gain = 0;
   if(r.secs){ gain = r.secs * Math.max(bps(), perChar() * 3); state.bytes += gain; spinAdd(gain, IDLE_W); }
-  (r.mods || []).forEach(([k, mu, secs, label]) => state.mods.push({ kind: k, mult: mu, label, until: Date.now() + secs * 1000 }));
-  win ? S.evWins++ : S.evLoss++;
-  const kl = { idle: 'idle', type: L2('digitação', 'typing'), all: L2('tudo', 'everything') };
-  const txt = (win ? L2('Ataque repelido!', 'Attack repelled!') + ' +' + fmtB(gain) : L2('Sistema comprometido', 'System compromised')) + (m0 ? '  |  ' + m0[3] + ' x' + m0[1] + ' ' + kl[m0[0]] + ' ' + fmtEta(m0[2]) : '');
-  toast((win ? 'DEFENDED // ' : 'BREACH // ') + txt); print('[EVENT] ' + txt, win ? 'warn' : 'err'); logEvent('event ' + a.id + (win ? ' won' : ' lost'));
-  if(win){ fxEvent('waves', 3); playSfx('ok'); } else { fx.glitch = 1; fx.shake = 1; spin.err = 1; playSfx('error'); }
+  (r.mods || []).forEach(([k, mu, secs, label]) => state.mods.push({ kind: k, mult: mu, label, until: Date.now() + secs * 1000 * ((k === 'cost' ? mu > 1 : mu < 1) ? ins : 1) }));
+  if(win === true) S.evWins++; else if(win === false) S.evLoss++;
+  S.evHist = S.evHist || []; S.evHist.push({ id: a.id, r: win === true ? 1 : win === false ? 0 : 2, t: Date.now() }); if(S.evHist.length > 12) S.evHist.shift();
+  const kl = { idle: 'idle', type: L2('digitação', 'typing'), all: L2('tudo', 'everything'), cost: L2('custo', 'cost') }, m0 = (r.mods || [])[0];
+  const wt = d.wt ? L2(d.wt[0], d.wt[1]) : L2('Ataque repelido!', 'Attack repelled!'), lt = d.lt ? L2(d.lt[0], d.lt[1]) : L2('Sistema comprometido', 'System compromised'), pt = d.pt ? L2(d.pt[0], d.pt[1]) : L2('Encerrado.', 'Closed.');
+  const txt = (win === true ? wt + (gain ? ' +' + fmtB(gain) : '') : win === false ? lt : pt) + (m0 ? '  |  ' + m0[3] + ' x' + m0[1] + ' ' + kl[m0[0]] + ' ' + fmtEta(m0[2]) : '');
+  toast((d.soft ? 'EVENT' : win === true ? 'DEFENDED' : win === false ? 'BREACH' : 'EVENT') + ' // ' + txt); print('[EVENT] ' + txt, win === false && !d.soft ? 'err' : 'warn'); logEvent('event ' + a.id + ' ' + win);
+  if(win === true){ fxEvent('waves', 3); playSfx('ok'); } else if(win === false){ fx.glitch = 1; fx.shake = 1; spin.err = 1; playSfx('error'); }
+  if(win === true && d.chain && Math.random() < d.chain.p) setTimeout(() => evStart(d.chain.id), 2500);       // evento em cadeia
   ev.nextAt = Date.now() + 180000 + Math.random() * 180000; saveGame();
 }
 function evTick(dt){
   const now = Date.now(); if(state.mods.length) state.mods = state.mods.filter(m => m.until > now);
+  document.body.classList.toggle('blackout', state.mods.some(m => m.label === 'BLACKOUT'));
   const a = ev.act;
   if(!a){
     if(now > ev.nextAt && state.stats.done >= 3 && !state.modal && !bootOn && !document.hidden && !mg.act && !mg.invite){
-      const ids = Object.keys(EVENTS), tot = ids.reduce((x, i) => x + EVENTS[i].w, 0); let r = Math.random() * tot, k = 0;
+      const ids = Object.keys(EVENTS).filter(i => EVENTS[i].w > 0), tot = ids.reduce((x, i) => x + EVENTS[i].w, 0); let r = Math.random() * tot, k = 0;
       while(k < ids.length - 1 && r > EVENTS[ids[k]].w){ r -= EVENTS[ids[k]].w; k++; }
       evStart(ids[k]);
     }
     return;
   }
+  if(a.def.tick) return a.def.tick(a, dt);
+  evTickG(a, dt);
+}
+function evTickG(a, dt){
   if(a.total0){ a.tleft -= dt; if(a.tleft <= 0) return evEnd(false); }
   if(a.per){ a.pleft -= dt; if(a.pleft <= 0) evNext(false); if(!ev.act) return; }
   $('evfill').style.width = Math.max(0, (a.per ? a.pleft / a.per : a.tleft / a.total0) * 100) + '%';
-  $('evinfo').textContent = (a.id === 'keyrush' ? `${a.hits}/${a.targets.length}   ${L2('falhas', 'misses')} ${a.miss}/2` : `${L2('erros', 'errors')} ${a.errs}${a.def.maxErr ? '/' + a.def.maxErr : ''}`) + (a.total0 ? '   ' + Math.ceil(Math.max(0, a.tleft)) + 's' : '');
+  $('evinfo').textContent = a.def.info ? a.def.info(a) + (a.total0 ? '   ' + Math.ceil(Math.max(0, a.tleft)) + 's' : '') : (a.id === 'keyrush' ? `${a.hits}/${a.targets.length}   ${L2('falhas', 'misses')} ${a.miss}/2` : `${L2('erros', 'errors')} ${a.errs}${a.def.maxErr ? '/' + a.def.maxErr : ''}`) + (a.total0 ? '   ' + Math.ceil(Math.max(0, a.tleft)) + 's' : '');
   if(a.total0 && a.tleft < 5 && Math.ceil(a.tleft) !== a.beep){ a.beep = Math.ceil(a.tleft); playSfx('click', { pitch: 700 }); }
 }
 document.addEventListener('keydown', e => { if(!ev.act) return; e.stopImmediatePropagation(); e.preventDefault(); evKey(e); }, true);   // durante o evento, o teclado é só dele
@@ -2445,6 +2579,13 @@ function mgTick(){            // convida só se o jogador estiver ATIVO e não h
   if(now > mg.nextAt && !ev.act && !state.modal && !bootOn && !document.hidden && state.stats.done >= 3) mgOffer();
 }
 
+function dailyReward(){          // recompensa diária: sequência de dias seguidos (até 7x)
+  const S = state.stats, dk = d => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(), day = dk(new Date()); if(S.lastDay === day) return;
+  S.streak = S.lastDay === dk(new Date(Date.now() - 864e5)) ? (S.streak || 0) + 1 : 1; S.lastDay = day;
+  const gain = Math.min(S.streak, 7) * 60 * Math.max(bps(), perChar() * 3); state.bytes += gain; spinAdd(gain, IDLE_W);
+  const msg = L2(`Recompensa diária! Dia ${S.streak}: +${fmtB(gain)}`, `Daily reward! Day ${S.streak}: +${fmtB(gain)}`); toast('EVENT // ' + msg); print('[DAILY] ' + msg, 'warn'); saveGame();
+}
+
 /* ---- Prestige: reinstala o sistema em troca de root keys ---- */
 function doPrestige(){
   if(rkGain() < 1) return;
@@ -2576,7 +2717,7 @@ $('nameinput').addEventListener('keydown', e => {
   if(!v){ $('nmhint').className = 'err'; $('nmhint').textContent = L2('Nome inválido. Use 2 a 16 caracteres.', 'Invalid name. Use 2-16 characters.'); return; }
   state.playerName = v; state.modal = false; $('namemodal').style.display = 'none';
   print(L2(`>> bem-vindo, ${v}. Digite "help" para começar.`, `>> welcome, ${v}. Type "help" to begin.`), 'warn');
-  logEvent('operator registered: ' + v); saveGame(); updateHeader(); focusHidden(); tutBoot();
+  logEvent('operator registered: ' + v); saveGame(); updateHeader(); focusHidden(); tutBoot(); dailyReward();
 });
 // Reset total: apaga o save e recarrega (state.wiping impede o autosave de regravar)
 function wipeGame(){
@@ -2595,7 +2736,7 @@ print(t('boot3'));
 print('TerminalIdle v1.2  //  node ' + state.nodeId + '.mesh');
 print(t('boot_tip'), 'dim');
 renderPrompt(); updateHeader();
-if(!state.playerName) openNameModal(); else { focusHidden(); afterBoot(() => { offlineReturn(); tutBoot(); }); }
+if(!state.playerName) openNameModal(); else { focusHidden(); afterBoot(() => { offlineReturn(); tutBoot(); dailyReward(); }); }
 startBoot();   // 1ª vez: pergunta o nome
 </script>
 </body>
