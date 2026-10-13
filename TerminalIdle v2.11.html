@@ -1,0 +1,2333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TerminalIdle</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💻</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&family=Azeret+Mono&family=IBM+Plex+Mono&family=Courier+Prime&family=Space+Mono&family=Source+Code+Pro&family=Syne+Mono&family=Cutive+Mono&family=Ubuntu+Mono&family=Press+Start+2P&family=JetBrains+Mono&family=Anonymous+Pro&family=Creepster&display=swap">
+<style>
+:root{
+  --bg:#000; --fg:#00ff00; --dim:#3a3a3a; --err:#ff3b3b; --warn:#ffd23b;
+  --glow:0,255,0; --fs:16px; --pad:12px;
+  --ff:'Fira Code','Consolas','Courier New',monospace; --ls:0em; --bw:1px; --bs:solid; --scan:.28; --vig:.6; --tsh:0 0 6px rgba(0,255,0,.6); --bgfx:none; --bgs:auto;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*{box-sizing:border-box}
+body{
+  margin:0;height:100%;background:var(--bg);background-image:var(--bgfx);background-size:var(--bgs);color:var(--fg);
+  font-family:var(--ff);font-size:var(--fs);letter-spacing:var(--ls);
+  text-shadow:var(--tsh);overflow:hidden;
+}
+body.no-glow{text-shadow:none}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:10;
+  background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,var(--scan)) 3px),
+             radial-gradient(ellipse at center,rgba(0,0,0,0) 60%,rgba(0,0,0,var(--vig)) 100%);
+  animation:flicker 4s infinite;
+}
+body.no-crt::after{display:none}
+@keyframes flicker{0%,100%{opacity:1}50%{opacity:.94}}
+#app{display:flex;flex-direction:column;height:100%;max-width:960px;margin:0 auto;padding:10px}
+#term{
+  flex:1;display:flex;flex-direction:column;overflow:hidden;
+  border:var(--bw) var(--bs) var(--fg);padding:var(--pad);
+  box-shadow:0 0 12px rgba(var(--glow),.25) inset;
+  cursor:text;
+}
+#topbar{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
+  flex:0 0 auto;padding-bottom:8px;margin-bottom:8px;border-bottom:1px dashed var(--fg);
+}
+#term.hide-status #statusbar{display:none}
+#term.hide-status #topbar{justify-content:flex-end;padding-bottom:4px;margin-bottom:4px;border-bottom-color:transparent}
+#statusbar{flex:1;opacity:.85;white-space:pre-wrap;word-break:break-word;min-width:0}
+#langbtn{
+  flex:0 0 auto;background:transparent;color:var(--fg);border:var(--bw) var(--bs) var(--fg);
+  font:inherit;cursor:pointer;padding:1px 8px;line-height:1.4;text-shadow:inherit;
+  letter-spacing:.08em;
+}
+#langbtn:hover,#langbtn:focus{
+  background:var(--fg);color:var(--bg);text-shadow:none;outline:none;
+}
+#output{flex:1;overflow-y:auto;white-space:pre-wrap;word-break:break-word;min-height:0}
+.line{min-height:1.3em}
+.err{color:var(--err);text-shadow:0 0 6px var(--err)}
+.warn{color:var(--warn);text-shadow:0 0 6px var(--warn)}
+.dim{opacity:.6}
+.okline{color:var(--fg)}
+#challenge{font-size:1.15em;margin:12px 0;letter-spacing:.4px}
+#challenge .todo{color:var(--dim);text-shadow:none}
+#challenge .ok{color:var(--fg)}
+#challenge .cur{background:var(--fg);color:var(--bg);text-shadow:none;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{background:transparent;color:var(--fg)}}
+.shake{animation:shake .15s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.flash{animation:flash .35s}
+@keyframes flash{0%{background:rgba(var(--glow),.35)}100%{background:transparent}}
+#promptline{display:flex;flex:0 0 auto;align-items:flex-end;padding-top:6px;min-height:1.4em}
+#ptext{white-space:pre;word-break:break-all}
+#cursor{display:inline-block;flex-shrink:0;margin-left:1px;background:var(--fg);animation:blink 1s steps(1) infinite}
+#cursor.block{width:.6em;height:1.1em}
+#cursor.bar{width:2px;height:1.1em}
+#cursor.underline{width:.7em;height:2px;align-self:flex-end;margin-bottom:.15em}
+#hidden{position:fixed;opacity:0;left:-100px;top:0;width:1px;height:1px}
+#app{max-width:1800px}
+#main{flex:1;display:flex;gap:10px;min-height:0}
+#main #term{flex:1 1 0;min-width:0}
+#side{flex:0 0 clamp(230px,22vw,340px);min-width:0;display:flex;flex-direction:column;border:var(--bw) var(--bs) var(--fg);padding:var(--pad);box-shadow:0 0 12px rgba(var(--glow),.25) inset}
+#sidehead{display:flex;justify-content:space-between;border-bottom:1px dashed var(--fg);padding-bottom:6px;margin-bottom:6px;opacity:.85}
+#rotorwrap{flex:1;min-height:0;position:relative}
+#rotor{position:absolute;inset:0;width:100%;height:100%}
+#sidefoot{border-top:1px dashed var(--fg);padding-top:6px;margin-top:6px;opacity:.85;white-space:pre-wrap}
+@media (max-width:820px){#main{flex-direction:column}#side{flex:0 0 250px;order:-1}#main #term{flex:1 1 0}}
+#stats{flex:0 0 clamp(280px,24vw,360px);min-width:0;display:flex;flex-direction:column;border:var(--bw) var(--bs) var(--fg);padding:var(--pad);box-shadow:0 0 12px rgba(var(--glow),.25) inset}
+#stathead{border-bottom:1px dashed var(--fg);padding-bottom:6px;margin-bottom:6px;opacity:.85}
+#statbody{flex:1;overflow-y:auto;white-space:pre;font-size:.78em;min-height:0}
+#errflash{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;background:rgba(255,0,0,.16);box-shadow:inset 0 0 140px 40px rgba(255,40,40,.75)}
+#errflash.go{animation:errflash .35s ease-out}
+@keyframes errflash{0%{opacity:1}100%{opacity:0}}
+@media (max-width:1100px){#stats{display:none}}
+#namemodal{display:none;position:fixed;inset:0;z-index:5;background:rgba(0,0,0,.88);align-items:center;justify-content:center}
+.nmbox{width:min(90vw,520px);border:var(--bw) var(--bs) var(--fg);background:var(--bg);padding:20px;box-shadow:0 0 24px rgba(var(--glow),.5);display:flex;flex-direction:column;gap:12px}
+.nmin{display:flex;border-bottom:var(--bw) var(--bs) var(--fg);padding:4px 0}
+#nameinput{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--fg);font:inherit;text-shadow:inherit;caret-color:var(--fg)}
+#hud{position:absolute;top:2px;left:0;right:0;text-align:center;pointer-events:none;z-index:2}
+#hudbal{display:inline-block;font-size:clamp(24px,3vw,40px);font-weight:bold;line-height:1.1;text-shadow:0 0 14px rgba(var(--glow),.9)}
+#hudunit{font-size:.55em;opacity:.8}
+#hudrate{margin-top:2px;opacity:.9}
+#hudrate .arrow{display:inline-block;animation:hbob 1s ease-in-out infinite}
+.hb-bump{animation:hbump .18s ease-out}
+.hb-bump2{animation:hbump2 .45s ease-out}
+.hb-pop{animation:hpop .7s ease-out}
+.hb-spend{animation:hspend .5s ease-out}
+.hb-tick{animation:htick .4s ease-out}
+@keyframes hbump{0%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes hbump2{0%{transform:scale(1.28);text-shadow:3px 0 #f0f,-3px 0 #0ff,0 0 24px var(--fg)}60%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes hpop{0%{transform:scale(1.6);filter:brightness(2.2)}100%{transform:scale(1);filter:none}}
+@keyframes hspend{0%{color:var(--err);transform:translateY(4px) scale(.94)}100%{transform:none}}
+@keyframes htick{0%{text-shadow:0 0 14px var(--fg);transform:scale(1.04)}100%{transform:none}}
+@keyframes hbob{50%{transform:translateY(-3px)}}
+.hf{position:absolute;top:50%;white-space:nowrap;pointer-events:none;z-index:2;animation:hfloat 1.2s ease-out forwards}
+.hf.big{font-size:1.3em;font-weight:bold;text-shadow:0 0 10px var(--fg);animation-duration:1.4s}
+.hf.idle{opacity:.6;font-size:.8em}
+.hf.spend{color:var(--err);text-shadow:0 0 8px var(--err)}
+@keyframes hfloat{0%{opacity:0;transform:translate(-50%,10px)}15%{opacity:1}100%{opacity:0;transform:translate(-50%,-120px)}}
+@media (max-width:820px){#hudbal{font-size:22px}}
+.tbtn{background:transparent;color:var(--fg);border:var(--bw) var(--bs) var(--fg);font:inherit;cursor:pointer;padding:2px 10px;text-shadow:inherit;letter-spacing:.06em}
+.tbtn:hover:not(:disabled),.tbtn:focus{background:var(--fg);color:var(--bg);text-shadow:none;outline:none}
+.tbtn:disabled{opacity:.4;cursor:default}
+#hwbtn{flex:0 0 auto;margin-right:6px;padding:1px 8px;line-height:1.4}
+#hwmodal{display:none;position:fixed;inset:0;z-index:5;background:rgba(0,0,0,.88);align-items:center;justify-content:center}
+.hwbox{width:min(94vw,780px);max-height:86vh;display:flex;flex-direction:column;border:var(--bw) var(--bs) var(--fg);background:var(--bg);padding:16px;box-shadow:0 0 24px rgba(var(--glow),.5)}
+.hwhead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px dashed var(--fg);padding-bottom:8px;margin-bottom:8px;font-size:1.1em}
+#hwsum{opacity:.85;margin-bottom:8px;font-size:.9em}
+#hwlist{overflow-y:auto;flex:1;min-height:0}
+.hwrow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(var(--glow),.15)}
+.hwrow .pn{font-weight:bold}.hwrow .pd{opacity:.8;font-size:.85em}.hwrow .pr{white-space:nowrap}
+.hwrow.dim{opacity:.5}.hwrow.own .pn::after{content:' ✔'}
+.hwtabs{display:flex;gap:8px;margin-bottom:8px}
+.tbtn.on{background:var(--fg);color:var(--bg);text-shadow:none}
+#thlist{overflow-y:auto;flex:1;min-height:0}
+.thsample{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hudnext{font-size:.75em;opacity:.85;margin-top:4px}
+.hbar{width:min(70%,220px);height:5px;margin:3px auto 0;border:1px solid var(--fg);position:relative}
+.hbar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--fg);box-shadow:0 0 6px var(--fg);transition:width .3s}
+#offmodal{display:none;position:fixed;inset:0;z-index:5;background:rgba(0,0,0,.88);align-items:center;justify-content:center}
+.bignum{font-size:2em;font-weight:bold;text-align:center}
+#challenge.gold::before{content:'★ GOLDEN LINE  ';color:#ffd76a;text-shadow:0 0 8px #ffd76a}
+#challenge.gold .todo{color:#8a7430}
+#challenge.gold .ok{color:#ffd76a;text-shadow:0 0 8px #ffd76a}
+#app{position:relative;z-index:1}
+#rain{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.2}
+#boot{position:fixed;inset:0;z-index:7;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity .5s}
+#bootpre{margin:0;font:inherit;white-space:pre;text-shadow:var(--tsh);max-width:100vw;overflow:hidden}
+#toasts{position:fixed;top:12px;right:12px;z-index:8;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:min(90vw,340px)}
+.toast{border:var(--bw) var(--bs) var(--fg);background:var(--bg);padding:8px 12px;box-shadow:0 0 14px rgba(var(--glow),.5);animation:tin .35s cubic-bezier(.2,1.4,.4,1),tout .4s 3.2s forwards}
+.toast b{display:block;font-size:.7em;letter-spacing:.12em;opacity:.8}
+@keyframes tin{from{transform:translateX(120%);opacity:0}to{transform:none;opacity:1}}
+@keyframes tout{to{opacity:0;transform:translateY(-8px)}}
+#hudcombo{font-size:.75em;margin-top:4px;opacity:.9}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;transition:opacity .6s;box-shadow:inset 0 0 90px 10px rgba(var(--glow),.45)}
+body.hot::before{opacity:.55;animation:hpulse 1.4s ease-in-out infinite}
+body.fire::before{opacity:.9;animation:hpulse .7s ease-in-out infinite;box-shadow:inset 0 0 120px 20px rgba(255,120,30,.55)}
+@keyframes hpulse{50%{filter:brightness(1.6)}}
+.hit{display:inline-block;animation:hitpop .22s ease-out}
+@keyframes hitpop{0%{transform:scale(1.5);color:#fff;text-shadow:0 0 12px var(--fg)}100%{transform:none}}
+.lbar{height:3px;margin-top:6px;background:rgba(var(--glow),.12)}
+.lbar i{display:block;height:100%;background:var(--fg);box-shadow:0 0 6px var(--fg)}
+#challenge.gold .lbar i{background:#ffd76a;box-shadow:0 0 6px #ffd76a}
+#term.lineflash{animation:lflash .4s ease-out}
+@keyframes lflash{0%{box-shadow:0 0 22px 2px rgba(var(--glow),.8) inset}100%{box-shadow:0 0 0 0 rgba(var(--glow),0) inset}}
+#bootcta{margin-top:1.4em;text-shadow:var(--tsh);animation:ctab 1s steps(1) infinite}
+@keyframes ctab{50%{opacity:.15}}
+#sparks{position:fixed;inset:0;pointer-events:none;z-index:4}
+#sparks i{position:absolute;width:3px;height:3px;border-radius:1px;background:var(--fg);box-shadow:0 0 6px var(--fg);animation:spark .5s ease-out forwards}
+@keyframes spark{to{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
+#prestige{display:none;position:fixed;inset:0;z-index:6;background:rgba(0,0,0,.92);align-items:center;justify-content:center;text-align:center;transition:opacity .7s,background .6s}
+#prestige .pbox{min-width:min(90vw,520px)}
+#pretitle{font-size:1.1em;letter-spacing:.3em;margin-bottom:14px;animation:gtxt .25s steps(2) infinite}
+@keyframes gtxt{50%{transform:translateX(2px);text-shadow:-2px 0 #f0f,2px 0 #0ff}}
+#prepre{display:inline-block;text-align:left;margin:0;font:inherit;min-height:8em}
+#prenum{font-size:3.2em;font-weight:bold;text-shadow:0 0 24px var(--fg)}
+#premult{font-size:1.6em;opacity:.9}
+#prestige.flash{background:#fff;transition:background 0s}
+#prestige.flash .pbox{opacity:0}
+#prestige.out{opacity:0}
+#fog,#hwdeco,#hwlayer,#lightning{display:none}
+body.th-halloween #fog,body.th-halloween #hwdeco,body.th-halloween #hwlayer,body.th-halloween #lightning{display:block}
+body.th-halloween #rain{opacity:.3}
+body.th-halloween #hudbal,body.th-halloween .toast b,body.th-halloween #pretitle,body.th-halloween #prenum{font-family:'Creepster','Courier New',cursive;letter-spacing:.06em;font-weight:normal}
+#fog{position:fixed;left:-20%;right:-20%;bottom:0;height:38vh;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 20% 100%,rgba(150,80,200,.22),transparent 60%),radial-gradient(ellipse at 72% 100%,rgba(255,122,24,.14),transparent 60%);animation:fogmove 14s ease-in-out infinite alternate}
+@keyframes fogmove{from{transform:translateX(-6%)}to{transform:translateX(6%)}}
+#hwdeco{position:fixed;inset:0;pointer-events:none;z-index:3}
+#hwdeco i{position:absolute;font-style:normal}
+#hwdeco .web{top:-6px;font-size:84px;opacity:.5;filter:grayscale(1) brightness(1.5)}
+#hwdeco .web.l{left:-6px}#hwdeco .web.r{right:-6px;transform:scaleX(-1)}
+#hwdeco .moon{top:58px;right:7vw;font-size:64px;opacity:.26;filter:drop-shadow(0 0 22px #ffe9a8)}
+#hwdeco .pump{left:10px;bottom:6px;font-size:46px;animation:candle 1.6s ease-in-out infinite}
+@keyframes candle{0%,100%{filter:drop-shadow(0 0 10px #ff7a18) brightness(1)}33%{filter:drop-shadow(0 0 5px #ff7a18) brightness(.85)}66%{filter:drop-shadow(0 0 22px #ffb347) brightness(1.25)}}
+#hwdeco .spider{position:absolute;top:0;left:14vw;display:flex;flex-direction:column;align-items:center;transform-origin:top center;animation:sway 5s ease-in-out infinite}
+#hwdeco .thread{width:1px;background:rgba(255,255,255,.45);animation:thr 6s ease-in-out infinite}
+#hwdeco .spider b{font-size:26px;font-weight:normal}
+@keyframes thr{0%,100%{height:30px}50%{height:130px}}
+@keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+#hwlayer{position:fixed;inset:0;pointer-events:none;z-index:3}
+.hw-bat{position:absolute;left:-60px;font-size:30px;animation:batfly 7s linear forwards,batflap .22s ease-in-out infinite alternate}
+.hw-bat.rev{left:auto;right:-60px;animation-name:batfly2,batflap}
+@keyframes batfly{0%{transform:translate(0,0)}25%{transform:translate(28vw,-34px)}50%{transform:translate(56vw,22px)}75%{transform:translate(84vw,-28px)}100%{transform:translate(calc(100vw + 120px),8px)}}
+@keyframes batfly2{0%{transform:translate(0,0)}25%{transform:translate(-28vw,-34px)}50%{transform:translate(-56vw,22px)}75%{transform:translate(-84vw,-28px)}100%{transform:translate(calc(-100vw - 120px),8px)}}
+@keyframes batflap{from{scale:1 1}to{scale:1 .55}}
+.hw-ghost{position:absolute;bottom:-70px;font-size:48px;cursor:pointer;pointer-events:auto;opacity:.9;filter:drop-shadow(0 0 12px #fff);animation:ghostup 12s linear forwards}
+@keyframes ghostup{0%{transform:translate(0,0)}25%{transform:translate(30px,-28vh)}50%{transform:translate(-30px,-56vh)}75%{transform:translate(30px,-84vh)}100%{transform:translate(0,-120vh)}}
+#lightning{position:fixed;inset:0;pointer-events:none;z-index:9;background:rgba(220,200,255,.7);opacity:0}
+#lightning.go{animation:bolt .7s}
+@keyframes bolt{0%{opacity:0}5%{opacity:.9}12%{opacity:0}20%{opacity:.7}35%{opacity:0}100%{opacity:0}}
+#sparks i.emo{width:auto;height:auto;background:none !important;box-shadow:none !important;font-size:14px;font-style:normal}
+</style>
+</head>
+<body>
+<div id="namemodal"><div class="nmbox">
+  <div id="nmtitle" class="warn"></div><div id="nmask"></div>
+  <div class="nmin"><span>&gt;&nbsp;</span><input id="nameinput" maxlength="16" autocomplete="off" spellcheck="false"></div>
+  <div id="nmhint" class="dim"></div>
+</div></div>
+<div id="hwmodal"><div class="hwbox">
+  <div class="hwhead"><span id="hwtitle"></span><button id="hwclose" class="tbtn" type="button">✕</button></div>
+  <div class="hwtabs"><button id="tabparts" class="tbtn" type="button"></button><button id="tabthemes" class="tbtn" type="button"></button></div>
+  <div id="hwsum"></div>
+  <div id="hwlist"></div>
+  <div id="thlist" style="display:none"></div>
+</div></div>
+<div id="offmodal"><div class="nmbox"><div id="offtitle" class="warn"></div><div id="offtext"></div><div id="offnum" class="bignum">+0 B</div><button id="offok" class="tbtn" type="button">OK</button></div></div>
+<canvas id="rain"></canvas>
+<div id="fog"></div>
+<div id="hwdeco"><i class="web l">🕸</i><i class="web r">🕸</i><i class="moon">🌕</i><i class="pump">🎃</i><div class="spider"><span class="thread"></span><b>🕷</b></div></div>
+<div id="hwlayer"></div>
+<div id="lightning"></div>
+<div id="toasts"></div>
+<div id="boot"><div><pre id="bootpre"></pre><div id="bootcta"></div></div></div>
+<div id="prestige"><div class="pbox"><div id="pretitle"></div><pre id="prepre"></pre><div id="prenum"></div><div id="premult"></div></div></div>
+<div id="sparks"></div>
+<div id="errflash"></div>
+<div id="app">
+  <div id="main">
+  <div id="stats">
+    <div id="stathead">DATA.LOG // telemetry</div>
+    <div id="statbody"></div>
+  </div>
+  <div id="term">
+    <div id="topbar">
+      <div id="statusbar"></div>
+      <button id="hwbtn" class="tbtn" type="button">UPGRADES</button><button id="langbtn" type="button" title="language">PT</button>
+    </div>
+    <div id="output"></div>
+    <div id="promptline"><span id="ptext"></span><span id="cursor" class="block">&nbsp;</span></div>
+  </div>
+  <div id="side">
+    <div id="sidehead"><span>CORE.ROTOR // mesh://core</span><span>LINK UP</span></div>
+    <div id="rotorwrap"><canvas id="rotor"></canvas>
+      <div id="hud">
+        <div id="hudbal"><span id="hudnum">0</span> <span id="hudunit">B</span></div>
+        <div id="hudrate"><span class="arrow">▲</span> <span id="hudidle">0 B/s</span> <small>idle</small></div>
+        <div id="hudnext"><span id="hudnexttxt"></span><div class="hbar"><i id="hudbarfill"></i></div></div>
+        <div id="hudcombo"><span id="hudcombotxt"></span><div class="hbar"><i id="combofill"></i></div></div>
+      </div>
+    </div>
+    <div id="sidefoot"></div>
+  </div>
+  </div>
+  <input id="hidden" autocomplete="off" autocapitalize="off" spellcheck="false">
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   1. DADOS
+   ========================================================= */
+
+const CODE_LINES = [
+  'sudo systemctl restart nginx',
+  'git commit -m "lock down the gateway"',
+  'git push origin main',
+  'git checkout -b harden-auth',
+  'git rebase main',
+  'git stash push -m "wip ghost shell"',
+  'git log --oneline --graph',
+  'chmod +x deploy_script.sh',
+  'ssh-keygen -t ed -C ghost-operator',
+  'ssh ghost@relay -t tmux attach',
+  'docker compose up -d',
+  'docker compose down',
+  'docker logs -f api-gateway',
+  'npm run build',
+  'npm run test',
+  'npx prisma migrate deploy',
+  'pip install -r requirements.txt',
+  'python -m venv .venv',
+  'source .venv/bin/activate',
+  'cargo build --release',
+  'go test ./...',
+  'make clean && make all',
+  'curl -I https://localhost',
+  'grep -R "TODO" src',
+  'find . -name "*.log" -delete',
+  'tar -czf backup.tar.gz ./secrets',
+  'rsync -av ./out/ user@relay:~/drop',
+  'sudo ufw allow ssh',
+  'sudo ufw enable',
+  'sudo banctl status sshd',
+  'systemctl status postgresql',
+  'systemctl restart ssh-guard',
+  'journalctl -u ssh -f',
+  'cat /etc/hosts',
+  'tail -f /var/log/auth.log',
+  'nano /etc/ssh/sshd_config',
+  'vim ~/.ssh/config',
+  'export PATH="$HOME/bin:$PATH"',
+  'source ~/.bashrc',
+  'node server.js',
+  'const token = await fetchSecret()',
+  'if err != nil { return err }',
+  'SELECT password FROM users WHERE role = admin',
+  'openssl rand -hex',
+  'gpg --encrypt --recipient ops secret.txt',
+  'tcpdump -i eth -n',
+  'lsof -i -P',
+  'ss -tulwn',
+  'ip route',
+  'proxychains curl https://target',
+  'torify curl https://check.torproject.org',
+  'echo "access granted" > /tmp/flag',
+  'base64 -d token.txt',
+  'strings malware.bin',
+  'gdb ./service',
+  'strace -f ./service',
+  'chmod u+s /usr/bin/passwd',
+  'useradd -m -s /bin/bash ghost',
+  'passwd ghost',
+  'sudo visudo',
+  'crontab -e',
+  'tmux new -s ops',
+  'htop',
+  'watch -n one df -h',
+  'ufw status verbose',
+  'last -a | head',
+  'who -a',
+  'id ghost',
+  'uname -a',
+  'hostnamectl set-hostname raven',
+  'systemctl daemon-reload',
+  'nginx -t && systemctl reload nginx',
+  'ps aux | grep ssh',
+  'killall -HUP sshd',
+  'scp payload.bin ghost@relay:~/inbox',
+  'sftp ghost@vault',
+  'git config --global user.name "ghost"',
+  'alias ll="ls -alF"',
+  'chmod -R go-rwx ~/.ssh',
+  'cat ~/.ssh/authorized_keys',
+  'ssh-add ~/.ssh/id_ed',
+  'curl -X POST https://api.local/unlock',
+  'jq .token session.json',
+  'diff -u old.conf new.conf',
+  'patch -p one < harden.patch',
+];
+
+const PHRASES = {
+  pt: [
+    'o operador silencia o rastro antes do amanhecer',
+    'a senha fraca e a porta aberta para o caos',
+    'criptografe o disco antes de sair do laboratorio',
+    'nunca confie em uma rede aberta no aeroporto',
+    'o firewall recusou o pacote suspeito',
+    'a chave privada nao deve sair deste cofre',
+    'verifique o hash antes de executar o binario',
+    'o proxy esconde o origem mas nao o erro humano',
+    'um log limpo demais tambem e um sinal',
+    'a intrusao comeca com um clique descuidado',
+    'desligue o bluetooth quando estiver em campo',
+    'o token expirou e a sessao caiu no vazio',
+    'quem controla o dns controla o destino',
+    'o rootkit se esconde atras de um driver legitimo',
+    'apague os rastros mas conserve a prova',
+    'a engenharia social vence a criptografia preguicosa',
+    'o canal seguro treme quando o certificado e falso',
+    'monitore a porta que ninguem lembra de fechar',
+    'o dump da memoria revela o que o disco esconde',
+    'um script antigo e um convite ao desastre',
+    'a sombra digital dura mais que a noite',
+    'confirme a identidade antes de aceitar o patch',
+    'o honeypot canta enquanto o ladrão observa',
+    'isole a maquina comprometida sem hesitar',
+    'a frase secreta precisa ser longa e estranha',
+    'o operador respira fundo e continua digitando',
+    'nada e privado em um terminal compartilhado',
+    'revogue o acesso no mesmo segundo da duvida',
+    'o cabo de rede tambem e uma arma silenciosa',
+    'leia o contrato da api como se fosse um tratado',
+    'o backup so existe se voce ja restaurou uma vez',
+    'a luz do modem pisca como um alarme mudo',
+    'nao cole senha em canal sem cifra',
+    'o exploit espera a vaidade do administrador',
+    'cada pacote conta uma historia se voce souber ouvir',
+    'a auditoria chega sempre um dia tarde demais',
+    'o teclado e a arma e o silencio e o colete',
+    'mude a senha padrao antes do primeiro boot',
+    'o dumpster diving ainda funciona no seculo digital',
+    'um qr code desconhecido e um convite cego',
+    'a vpn caiu e o trafego nu atravessou a rua',
+    'o certificado autoassinado nao e um amuleto',
+    'registre o incidente sem dramatizar o relatorio',
+    'o zero day vive no codigo que ninguem revisa',
+    'a permissao excessiva e um tapete vermelho',
+    'o sandbox estremece quando o malware e esperto',
+    'nao ignore o aviso amarelo do navegador',
+    'a chave usb encontrada no chao e isca',
+    'o atacante prefere a pressa do plantonista',
+    'segmente a rede como se cada sala fosse um bunker',
+    'o log de auth grita quando a forca bruta comeca',
+    'desconfie do anexo que implora para ser aberto',
+    'a biometria falha e a frase mestra salva o dia',
+    'o relogio dessincronizado quebra a autenticacao',
+    'nunca deixe uma sessao root aberta na cafeteria',
+    'o payload viaja disfarçado de atualizacao',
+    'a superficie de ataque cresce com cada plugin',
+    'o operador troca de hop quando o rastro esquenta',
+    'um comentario no codigo entrega o segredo',
+    'a politica de senhas ruims e teatro de seguranca',
+    'o dump de trafego cabe no bolso de um pendrive',
+    'apague metadados antes de publicar a imagem',
+    'o beacon chama casa no intervalo da madrugada',
+    'a lateral movement comeca com uma credencial reusada',
+    'o playbook existe para quando as maos tremem',
+    'nao subestime o estagiario com acesso de admin',
+    'a darknet e barulhenta mas o vazamento e quieto',
+    'o checksum nao mente se voce realmente conferir',
+    'a porta serial ainda abre portas que o wifi fecha',
+    'o phishing chega vestido de urgencia corporativa',
+    'isole as chaves de producao das de desenvolvimento',
+    'o kernel panic e um poema que ninguem quer ler',
+    'a redundancia salva quando o disco principal some',
+    'o operador conta as teclas como um ritual',
+    'nada justifica senha escrita no adesivo do monitor',
+    'o dumpster da nuvem e um bucket publico',
+    'a sessao de tor nao perdoa o login da vida real',
+    'o malware ama a extensao que voce instalou ontem',
+    'revise o diff como se a vida dependesse disso',
+    'o silencio no chat do soc e o pior dos sinais',
+    'a chave de hardware dorme melhor longe da mesa',
+    'o traceroute revela o caminho que voce nao escolheu',
+    'a politica de least privilege e tediosa e correta',
+    'o payload ofuscado ainda deixa cheiro no disco',
+    'nao confie no wifi com nome de aeroporto famoso',
+    'o operador fecha o ticket so depois do pos mortem',
+    'a memoria volatil esquece o que o atacante queria',
+    'um bom runbook vale mais que um slogan de hacking',
+    'a cifra forte nao cura um humano apressado',
+    'o ghost no shell e so um usuario mal configurado',
+    'digite rapido mas pense mais rapido ainda',
+    'a linha de comando perdoa menos que a interface',
+    'o cafe esfria enquanto o exploit compila',
+    'nunca compartilhe a tela com o cofre aberto',
+    'o rastro de dns sobrevive ao fim da conexao',
+    'a disciplina vence o talento quando o alarme toca',
+    'o terminal pisca e o mundo la fora desaparece',
+    'guarde o segredo como se fosse um ultimo match',
+    'a rotina de patch e tedio que evita manchete',
+    'o operador termina o turno e limpa o historico',
+  ],
+  en: [
+    'the operator wipes the trail before sunrise',
+    'a weak password is an unlocked front door',
+    'encrypt the disk before you leave the lab',
+    'never trust the open network at the airport',
+    'the firewall dropped the suspicious packet',
+    'the private key must never leave this vault',
+    'verify the hash before you run the binary',
+    'the proxy hides origin but not human error',
+    'a log that is too clean is also a signal',
+    'intrusion often starts with a careless click',
+    'kill bluetooth when you are in the field',
+    'the token expired and the session fell silent',
+    'whoever owns dns owns the destination',
+    'the rootkit hides behind a legitimate driver',
+    'erase the trail but keep the evidence',
+    'social engineering beats lazy cryptography',
+    'the secure channel shakes when the cert is fake',
+    'watch the port that nobody remembers to close',
+    'a memory dump reveals what the disk conceals',
+    'an ancient script is an invitation to disaster',
+    'a digital shadow outlives the night',
+    'confirm identity before you accept the patch',
+    'the honeypot sings while the thief listens',
+    'isolate the compromised box without delay',
+    'the secret phrase must be long and strange',
+    'the operator breathes and keeps typing',
+    'nothing is private on a shared terminal',
+    'revoke access the second doubt appears',
+    'a network cable can be a quiet weapon',
+    'read the api contract like a peace treaty',
+    'a backup only exists after you restore it',
+    'the modem light blinks like a mute alarm',
+    'do not paste secrets into a clear channel',
+    'the exploit waits on an admin vanity',
+    'every packet tells a story if you listen',
+    'the audit always arrives one day too late',
+    'the keyboard is the weapon and silence the vest',
+    'change the default password before first boot',
+    'dumpster diving still works in a digital age',
+    'an unknown qr code is a blind invitation',
+    'the vpn dropped and naked traffic crossed the street',
+    'a self signed cert is not a lucky charm',
+    'file the incident without dressing it in drama',
+    'the zero day lives in code nobody reviews',
+    'excessive permission is a red carpet',
+    'the sandbox shakes when malware gets clever',
+    'do not ignore the yellow warning in the browser',
+    'a usb stick on the floor is bait',
+    'the attacker prefers the night shift in a hurry',
+    'segment the network as if every room is a bunker',
+    'auth logs scream when brute force begins',
+    'distrust the attachment that begs to be opened',
+    'biometrics fail and the master phrase saves the day',
+    'a drifting clock will break authentication',
+    'never leave a root shell open in a cafe',
+    'the payload travels dressed as an update',
+    'attack surface grows with every plugin',
+    'the operator hops when the trail gets warm',
+    'a comment in the code can leak the secret',
+    'a bad password policy is security theater',
+    'a traffic dump fits in the pocket of a stick',
+    'strip metadata before you publish the image',
+    'the beacon calls home in the quiet hours',
+    'lateral movement starts with a reused credential',
+    'the playbook exists for when your hands shake',
+    'never underestimate an intern with admin rights',
+    'the darknet is loud but the leak is quiet',
+    'checksums do not lie if you actually check them',
+    'a serial port still opens doors wifi cannot',
+    'phishing arrives dressed as corporate urgency',
+    'keep production keys far from development keys',
+    'a kernel panic is a poem nobody wants to read',
+    'redundancy saves you when the primary disk vanishes',
+    'the operator counts keystrokes like a ritual',
+    'a sticky note password is a confession',
+    'the cloud dumpster is a public bucket',
+    'a tor session does not forgive real life logins',
+    'malware loves the extension you installed yesterday',
+    'review the diff as if life depends on it',
+    'silence in the soc chat is the worst signal',
+    'the hardware key sleeps better away from the desk',
+    'traceroute reveals a path you did not choose',
+    'least privilege is boring and correct',
+    'an obfuscated payload still leaves a smell on disk',
+    'do not trust a hotspot named after a famous airport',
+    'close the ticket only after the postmortem',
+    'volatile memory forgets what the attacker wanted',
+    'a good runbook beats a hacking slogan',
+    'strong ciphers cannot cure a rushed human',
+    'the ghost in the shell is a misconfigured user',
+    'type fast but think faster',
+    'the command line forgives less than a gui',
+    'the coffee cools while the exploit compiles',
+    'never share a screen with the vault unlocked',
+    'dns traces survive after the socket dies',
+    'discipline beats talent when the alarm rings',
+    'the terminal blinks and the outside world fades',
+    'keep the secret as if it were the last match',
+    'patch day is boredom that prevents a headline',
+    'the operator ends the shift and clears history',
+  ]
+};
+
+const NODES = ['ghost','cipher','raven','ember','nova','viper','echo','null','onyx','wraith'];
+
+// Unidades reais: 8 bits = 1 B; 1 KB = 1024 B; 1 MB = 1024 KB ...
+const KB = 1024, MB = KB ** 2, GB = KB ** 3, TB = KB ** 4, PB = KB ** 5, EB = KB ** 6;
+// >>> Para novos upgrades: [id, nome, tipo, custo base (B), valor (B/caractere se active, B/s se passive), escala por unidade]
+// Custo sobe ~x12 e o rendimento ~x13 a cada tier (retorno em ~30-40 s no 1º exemplar), então o jogo escala de B até EB.
+const UPGRADES = [
+  [1,  'cpu.overclock',    'active',  15,        1,         1.15],
+  [2,  'daemon.ping',      'passive', 15,        0.5,       1.15],
+  [3,  'daemon.nmap',      'passive', 100,       4,         1.15],
+  [4,  'mesh.relay',       'passive', 400,       12,        1.18],
+  [5,  'ram.cache',        'active',  1.5 * KB,  10,        1.15],
+  [6,  'botnet.node',      'passive', 6 * KB,    200,       1.15],
+  [7,  'simd.vector',      'active',  20 * KB,   120,       1.15],
+  [8,  'crypto.miner',     'passive', 80 * KB,   2.5 * KB,  1.15],
+  [9,  'asic.rig',         'active',  300 * KB,  1.8 * KB,  1.15],
+  [10, 'data.siphon',      'passive', 1 * MB,    30 * KB,   1.15],
+  [11, 'gpu.cluster',      'active',  5 * MB,    30 * KB,   1.15],
+  [12, 'gpu.farm',         'passive', 15 * MB,   400 * KB,  1.15],
+  [13, 'tensor.core',      'active',  80 * MB,   450 * KB,  1.15],
+  [14, 'quantum.core',     'passive', 220 * MB,  5.5 * MB,  1.16],
+  [15, 'photonic.bus',     'active',  1.2 * GB,  7 * MB,    1.16],
+  [16, 'sat.uplink',       'passive', 3.5 * GB,  85 * MB,   1.16],
+  [17, 'neuro.link',       'active',  30 * GB,   170 * MB,  1.16],
+  [18, 'neural.mesh',      'passive', 50 * GB,   1.2 * GB,  1.16],
+  [19, 'holo.link',        'active',  600 * GB,  3.5 * GB,  1.16],
+  [20, 'ai.overmind',      'passive', 800 * GB,  20 * GB,   1.16],
+  [21, 'quasar.link',      'active',  12 * TB,   70 * GB,   1.17],
+  [22, 'dark.fiber',       'passive', 14 * TB,   350 * GB,  1.17],
+  [23, 'orbital.cluster',  'passive', 250 * TB,  6 * TB,    1.17],
+  [24, 'singularity.core', 'passive', 4 * PB,    100 * TB,  1.17],
+  [25, 'reality.fork',     'passive', 70 * PB,   1.8 * PB,  1.17],
+  [26, 'omega.protocol',   'passive', 1.2 * EB,  32 * PB,   1.17],
+].map(([id, name, type, baseCost, value, scale]) => ({ id, name, type, baseCost, value, scale }));
+
+// >>> Temas completos: cores + fonte + efeitos. Para criar outro, copie uma linha.
+// fsm = escala da fonte | ls = espaçamento de letras | bw/bs = espessura/estilo da borda | scan/vig = scanlines/vinheta (0 a 1)
+// gk = força do brilho do texto | fx = fundo (grid, stripes, dots, cols) | warn/err = cores de aviso/erro | snd = tom do som das teclas
+const THEMES = [
+  { id: 'green',   name: 'phosphor.green', cost: 0,        fg: '#00ff00', bg: '#000000', glow: '0,255,0',     dim: '#3a3a3a', font: "'Fira Code','Consolas','Courier New',monospace", fsm: 1,    scan: .28, vig: .6,  gk: 1,   fx: 'none',    snd: 0 },
+  { id: 'ice',     name: 'arctic.ice',     cost: 2 * KB,   fg: '#b8f3ff', bg: '#02060a', glow: '184,243,255', dim: '#3d5560', font: "'Share Tech Mono','Consolas',monospace",        fsm: 1.05, ls: .01, scan: .12, vig: .5,  gk: .5,  fx: 'grid',    snd: 300 },
+  { id: 'amber',   name: 'amber.crt',      cost: 8 * KB,   fg: '#ffb000', bg: '#0a0700', glow: '255,176,0',   dim: '#5a4010', font: "'VT323','Courier New',monospace",               fsm: 1.3,  scan: .42, vig: .75, gk: 1.3, fx: 'none',    warn: '#fff1a8', snd: -200 },
+  { id: 'cyan',    name: 'cyber.cyan',     cost: 40 * KB,  fg: '#00e5ff', bg: '#001018', glow: '0,229,255',   dim: '#1a4a55', font: "'Azeret Mono','Consolas',monospace",            fsm: .9,   ls: .02, scan: .18, vig: .55, gk: 1.1, fx: 'grid',    snd: 500 },
+  { id: 'halloween', name: 'halloween.exe', cost: 64 * KB, fg: '#ff7a18', bg: '#0b0510', glow: '255,122,24', dim: '#4d2a5c', font: "'Share Tech Mono','Courier New',monospace", fsm: 1.05, scan: .22, vig: .7, gk: 1.5, fx: 'none', warn: '#b44cff', err: '#ff3b3b', snd: -150 },
+  { id: 'white',   name: 'paper.mono',     cost: 200 * KB, fg: '#e8e8e8', bg: '#0a0a0a', glow: '232,232,232', dim: '#555555', font: "'Courier Prime','Courier New',monospace",       fsm: 1,    scan: .04, vig: .25, gk: .15, fx: 'none',    snd: -500 },
+  { id: 'magenta', name: 'synthwave',      cost: 1 * MB,   fg: '#ff4dff', bg: '#0a0010', glow: '255,77,255',  dim: '#4a2055', font: "'Space Mono','Consolas',monospace",             fsm: .92,  scan: .22, vig: .6,  gk: 1.5, fx: 'stripes', warn: '#00f0ff', snd: 700 },
+  { id: 'red',     name: 'red.alert',      cost: 8 * MB,   fg: '#ff3b3b', bg: '#100000', glow: '255,59,59',   dim: '#552020', font: "'Source Code Pro','Courier New',monospace",     fsm: 1,    bs: 'dashed', scan: .3, vig: .7, gk: 1.3, fx: 'none', warn: '#ffd23b', err: '#ffffff', snd: -100 },
+  { id: 'violet',  name: 'void.violet',    cost: 64 * MB,  fg: '#b388ff', bg: '#090012', glow: '179,136,255', dim: '#3d2a60', font: "'Syne Mono','Courier New',monospace",           fsm: .95,  ls: .03, scan: .2,  vig: .6,  gk: 1.2, fx: 'dots',    snd: 400 },
+  { id: 'gold',    name: 'royal.gold',     cost: 512 * MB, fg: '#ffd76a', bg: '#0c0900', glow: '255,215,106', dim: '#5a4a20', font: "'Cutive Mono','Courier New',monospace",         fsm: 1.05, bw: 3, bs: 'double', scan: .15, vig: .5, gk: 1.1, fx: 'none', snd: -300 },
+  { id: 'matrix',  name: 'the.matrix',     cost: 4 * GB,   fg: '#39ff14', bg: '#000800', glow: '57,255,20',   dim: '#1f4a18', font: "'Ubuntu Mono','Courier New',monospace",        fsm: 1.15, scan: .3,  vig: .7,  gk: 1.4, fx: 'cols',    snd: 200 },
+  { id: 'pixel',   name: 'pixel.8bit',     cost: 16 * GB,  fg: '#ffcd75', bg: '#1a1c2c', glow: '255,205,117', dim: '#566c86', font: "'Press Start 2P','Courier New',monospace",      fsm: .62,  bw: 2, scan: 0, vig: .2, gk: 0, fx: 'none', warn: '#38b764', err: '#ef7d57', snd: 900 },
+  { id: 'dos',     name: 'blue.dos',       cost: 64 * GB,  fg: '#e8e8e8', bg: '#0a1a8c', glow: '232,232,232', dim: '#7f8fe0', font: "'IBM Plex Mono','Courier New',monospace",       fsm: 1,    bw: 3, bs: 'double', scan: .1, vig: .3, gk: .2, fx: 'none', warn: '#ffff55', err: '#ff5555', snd: 100 },
+  { id: 'tokyo',   name: 'neon.tokyo',     cost: 512 * GB, fg: '#ff2a6d', bg: '#0d0221', glow: '255,42,109',  dim: '#5a2a52', font: "'JetBrains Mono','Consolas',monospace",         fsm: .95,  scan: .2,  vig: .6,  gk: 1.6, fx: 'grid',    warn: '#05d9e8', err: '#ffffff', snd: 600 },
+  { id: 'sunset',  name: 'sunset.bash',    cost: 4 * TB,   fg: '#ff9e64', bg: '#1b1105', glow: '255,158,100', dim: '#6b4a2a', font: "'Anonymous Pro','Courier New',monospace",       fsm: 1.15, ls: .01, scan: .18, vig: .55, gk: 1,   fx: 'stripes', snd: -400 },
+];
+const THEME_FX = {
+  grid:    ['linear-gradient(rgba(@G@,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(@G@,.07) 1px,transparent 1px)', '26px 26px'],
+  stripes: ['repeating-linear-gradient(0deg,rgba(@G@,.06) 0 2px,transparent 2px 7px)', 'auto'],
+  dots:    ['radial-gradient(rgba(@G@,.14) 1px,transparent 1.5px)', '18px 18px'],
+  cols:    ['repeating-linear-gradient(90deg,rgba(@G@,.06) 0 1px,transparent 1px 16px)', 'auto'],
+};
+
+const I18N = {
+  pt: {
+    lang_hint: 'Clique para alternar idioma (PT/EN)',
+    lang_switched: 'idioma do sistema: português — comandos de código continuam em inglês',
+    boot0: 'BIOS .............. ok',
+    boot1: 'kernel ghost ...... carregado',
+    boot2: 'mesh link ......... up',
+    boot3: 'sessao operador ... concedida',
+    boot_tip: 'Tudo acontece neste terminal. Digite "help". Clique em PT/EN no canto para idioma.',
+    help_title: 'Comandos disponíveis:',
+    h_help: 'lista os comandos',
+    h_store: 'catálogo de upgrades',
+    h_shop: 'loja de customizações (cores)',
+    h_buy: 'compra upgrade numérico ou tema',
+    h_theme: 'aplica um tema já desbloqueado',
+    h_settings: 'mostra as configurações atuais',
+    h_set: 'altera uma configuração',
+    h_farm: 'modo de digitação ativa',
+    h_status: 'resumo do progresso',
+    h_clear: 'limpa o terminal',
+    h_history: 'últimos comandos',
+    h_lang: 'idioma (pt|en) — ou clique no canto',
+    h_ops: 'whoami, hostname, uname, ps, scan, logs, trace',
+    store_title: '=== STORE (upgrades) ===',
+    shop_title: '=== SHOP (customizações) ===',
+    shop_hint: 'Temas de cor — compre e ative com "theme <id>"',
+    shop_use: 'Use: buy <id>   depois: theme <id>',
+    use_buy: 'Use: buy <id>',
+    buy_usage: 'Uso: buy <id>  (veja "store" ou "shop")',
+    theme_owned: '{name} já era seu. Tema aplicado.',
+    no_bytes: 'Bytes insuficientes. Necessário: {n}',
+    theme_unlocked: '{name} desbloqueado e aplicado.',
+    not_found: 'Item não encontrado. Veja "store" ou "shop".',
+    installed: '{name} instalado (x{n}). Próximo custo: {c}',
+    theme_usage: 'Uso: theme <id>  (veja "shop")',
+    theme_missing: 'Tema inexistente. Veja "shop".',
+    theme_locked: 'Tema bloqueado. Compre com: buy {id}',
+    theme_active: 'Tema ativo: {name}',
+    set_usage: 'Uso: set <chave> <valor>',
+    set_keys: 'Chaves: font, crt, glow, cursor, status, sound, volume, prompt, lang',
+    font_err: 'Fonte deve ser um número entre {a} e {b}.',
+    onoff_err: 'Uso: set {k} on|off',
+    vol_err: 'Volume deve ser um número entre 0 e 100.',
+    cursor_err: 'Uso: set cursor block|bar|underline',
+    prompt_err: 'Uso: set prompt <texto>',
+    unknown_key: 'Chave desconhecida: {key}. Tente "settings".',
+    already_free: 'Você já está no modo livre.',
+    hist_empty: '(histórico vazio)',
+    unknown_cmd: 'bash: {name}: comando não encontrado (tente "help")',
+    farm_in: '>> LINK ABERTO. Digite a linha exibida. ESC ou "exit"+ENTER sai.',
+    farm_out: '>> LINK FECHADO. Sessão de digitação encerrada.',
+    farm_prompt: '[FARM] ESC ou "exit"+ENTER para sair > ',
+    access: 'ACCESS GRANTED  //  shell estável',
+    owned: 'desbloqueado',
+    free: 'grátis',
+    active: '[ATIVO]',
+    have: '[possuído]',
+    gen: 'GERAÇÃO',
+    up_cpu: '+1 B por caractere digitado',
+    up_ping: '+0.5 B/s',
+    up_nmap: '+4.0 B/s',
+    up_relay: '+12.0 B/s  (relay da mesh)',
+    who: 'uid=0(root) gid=0(root) groups=0(root),ops,mesh',
+    host: 'hostname: {node}.mesh',
+    uname: 'GhostOS ghost {node} tty  (ops-idle)',
+    ps_title: 'PID   TTY      CMD',
+    logs_title: '--- /var/log/auth ---',
+    scan_start: '>> varrendo a mesh...',
+    scan_done: 'varredura completa. hosts mapeados.',
+    trace_start: '>> traceroute mesh://core',
+    trace_done: 'trace completo. rastro frio.',
+    flavor0: '[net] handshake aceito',
+    flavor1: '[sys] shell estável',
+    flavor2: '[ops] pacote encaminhado',
+    flavor3: '[sec] rastros limpos',
+    flavor4: '[mesh] relay confirmado',
+    flavor5: '[auth] ticket renovado',
+  },
+  en: {
+    lang_hint: 'Click to switch language (PT/EN)',
+    lang_switched: 'system language: english — code lines stay in english',
+    boot0: 'BIOS .............. ok',
+    boot1: 'kernel ghost ...... loaded',
+    boot2: 'mesh link ......... up',
+    boot3: 'operator session .. granted',
+    boot_tip: 'Everything happens in this terminal. Type "help". Click PT/EN in the corner to switch language.',
+    help_title: 'Available commands:',
+    h_help: 'list commands',
+    h_store: 'upgrade catalog',
+    h_shop: 'customization shop (colors)',
+    h_buy: 'buy a numeric upgrade or a theme',
+    h_theme: 'apply an unlocked theme',
+    h_settings: 'show current settings',
+    h_set: 'change a setting',
+    h_farm: 'active typing mode',
+    h_status: 'progress summary',
+    h_clear: 'clear the terminal',
+    h_history: 'recent commands',
+    h_lang: 'language (pt|en) — or click the corner',
+    h_ops: 'whoami, hostname, uname, ps, scan, logs, trace',
+    store_title: '=== STORE (upgrades) ===',
+    shop_title: '=== SHOP (cosmetics) ===',
+    shop_hint: 'Color themes — buy then activate with "theme <id>"',
+    shop_use: 'Use: buy <id>   then: theme <id>',
+    use_buy: 'Use: buy <id>',
+    buy_usage: 'Usage: buy <id>  (see "store" or "shop")',
+    theme_owned: '{name} already owned. Theme applied.',
+    no_bytes: 'Not enough bytes. Need: {n}',
+    theme_unlocked: '{name} unlocked and applied.',
+    not_found: 'Item not found. See "store" or "shop".',
+    installed: '{name} installed (x{n}). Next cost: {c}',
+    theme_usage: 'Usage: theme <id>  (see "shop")',
+    theme_missing: 'Unknown theme. See "shop".',
+    theme_locked: 'Theme locked. Buy with: buy {id}',
+    theme_active: 'Active theme: {name}',
+    set_usage: 'Usage: set <key> <value>',
+    set_keys: 'Keys: font, crt, glow, cursor, status, sound, volume, prompt, lang',
+    font_err: 'Font must be a number between {a} and {b}.',
+    onoff_err: 'Usage: set {k} on|off',
+    vol_err: 'Volume must be a number between 0 and 100.',
+    cursor_err: 'Usage: set cursor block|bar|underline',
+    prompt_err: 'Usage: set prompt <text>',
+    unknown_key: 'Unknown key: {key}. Try "settings".',
+    already_free: 'You are already in free mode.',
+    hist_empty: '(history empty)',
+    unknown_cmd: 'bash: {name}: command not found (try "help")',
+    farm_in: '>> LINK OPEN. Type the displayed line. ESC or "exit"+ENTER leaves.',
+    farm_out: '>> LINK CLOSED. Typing session ended.',
+    farm_prompt: '[FARM] ESC or "exit"+ENTER to leave > ',
+    access: 'ACCESS GRANTED  //  shell stable',
+    owned: 'unlocked',
+    free: 'free',
+    active: '[ACTIVE]',
+    have: '[owned]',
+    gen: 'GEN',
+    up_cpu: '+1 B per typed character',
+    up_ping: '+0.5 B/s',
+    up_nmap: '+4.0 B/s',
+    up_relay: '+12.0 B/s  (mesh relay)',
+    who: 'uid=0(root) gid=0(root) groups=0(root),ops,mesh',
+    host: 'hostname: {node}.mesh',
+    uname: 'GhostOS ghost {node} tty  (ops-idle)',
+    ps_title: 'PID   TTY      CMD',
+    logs_title: '--- /var/log/auth ---',
+    scan_start: '>> scanning the mesh...',
+    scan_done: 'scan complete. hosts mapped.',
+    trace_start: '>> traceroute mesh://core',
+    trace_done: 'trace complete. trail cold.',
+    flavor0: '[net] handshake accepted',
+    flavor1: '[sys] shell stable',
+    flavor2: '[ops] packet forwarded',
+    flavor3: '[sec] traces wiped',
+    flavor4: '[mesh] relay confirmed',
+    flavor5: '[auth] ticket renewed',
+  }
+};
+
+const SAVE_KEY = 'terminalidle_save_v2';
+const SAVE_KEY_LEGACY = 'terminalidle_save_v1';
+const FONT_MIN = 12, FONT_MAX = 28;
+const DEFAULT_PROMPT = 'root@cyber-node:~# ';
+const ALIASES = {
+  ajuda: 'help', loja: 'store', shop: 'store', comprar: 'buy', tarefas: 'farm',
+  limpar: 'clear', historico: 'history', idioma: 'lang',
+  config: 'settings', configuracoes: 'settings', varredura: 'scan',
+  quem: 'whoami', rastro: 'trace', nome: 'name', reiniciar: 'reset', hw: 'hardware', pecas: 'hardware', upgrades: 'hardware', prestigio: 'prestige', temas: 'themes', conquistas: 'achievements', missoes: 'achievements', missions: 'achievements', ach: 'achievements', perk: 'perks', vantagens: 'perks', renascer: 'prestige',
+};
+
+/* =========================================================
+   2. ESTADO + SAVE / LOAD
+   ========================================================= */
+const bootAt = Date.now();
+const state = {
+  bytes: 0,
+  owned: {},
+  totalTyped: 0,
+  themesOwned: ['green'],
+  theme: 'green',
+  nodeId: NODES[Math.floor(Math.random() * NODES.length)],
+  playerName: '', modal: false, wiping: false,
+  settings: {
+    font: 16,
+    crt: true,
+    glow: true,
+    cursor: 'block',
+    status: true,
+    prompt: DEFAULT_PROMPT,
+    sound: true,
+    volume: 70,
+    lang: 'pt',
+  },
+  mode: 'FREE',
+  buffer: '',
+  cmd: null, pos: 0,
+  rawLog: '',
+  combo: 0,
+  keyTimes: [],
+  history: [],
+  histIdx: -1,
+  // WPM: média só enquanto está em FARM; fora dele o valor exibido decai
+  wpmView: 0, farmStart: 0, farmChars: 0, farmAvg: 0, farmEnter: 0,
+  // >>> Estatísticas persistentes (painel da esquerda). Adicione novos contadores aqui.
+  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0 },
+};
+
+function saveGame(){
+  if(state.wiping) return;      // durante o reset não regrava o save
+  try{
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      bytes: state.bytes,
+      owned: state.owned,
+      totalTyped: state.totalTyped,
+      themesOwned: state.themesOwned,
+      theme: state.theme,
+      nodeId: state.nodeId,
+      playerName: state.playerName,
+      settings: state.settings,
+      stats: state.stats,
+      t: Date.now()
+    }));
+  }catch(e){}
+}
+function loadGame(){
+  try{
+    let d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if(!d){
+      d = JSON.parse(localStorage.getItem(SAVE_KEY_LEGACY) || 'null');
+    }
+    if(d){
+      state.bytes = +d.bytes || 0;
+      state.owned = d.owned || {};
+      state.totalTyped = +d.totalTyped || 0;
+      state.savedAt = +d.t || 0;
+      state.themesOwned = Array.isArray(d.themesOwned) && d.themesOwned.length
+        ? d.themesOwned : ['green'];
+      if(!state.themesOwned.includes('green')) state.themesOwned.push('green');
+      state.theme = d.theme || 'green';
+      if(d.nodeId) state.nodeId = d.nodeId;
+      if(typeof d.playerName === 'string') state.playerName = d.playerName;
+      if(d.stats && typeof d.stats === 'object') state.stats = { ...state.stats, ...d.stats };
+      if(d.settings && typeof d.settings === 'object'){
+        state.settings = { ...state.settings, ...d.settings };
+      }
+      const vol = +state.settings.volume;
+      state.settings.volume = Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : 70;
+      state.settings.sound = state.settings.sound !== false;
+      state.settings.lang = state.settings.lang === 'en' ? 'en' : 'pt';
+    }
+  }catch(e){}
+  if(!state.settings.prompt || state.settings.prompt === DEFAULT_PROMPT){
+    state.settings.prompt = 'root@' + state.nodeId + ':~# ';
+  }
+}
+
+function t(key, vars){
+  const pack = I18N[state.settings.lang] || I18N.pt;
+  let s = pack[key] || I18N.en[key] || I18N.pt[key] || key;
+  if(vars){
+    Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(String(vars[k])); });
+  }
+  return s;
+}
+function lang(){ return state.settings.lang === 'en' ? 'en' : 'pt'; }
+
+/* =========================================================
+   3. ECONOMIA
+   ========================================================= */
+// >>> Peças de hardware (permanentes, sobrevivem ao prestige). [id, nome, tipo, valor, custo]
+// tipos: idle/type/all = multiplicadores; disc = multiplicador do custo dos upgrades (<1); combo = +combo máx; rk = mult. de root keys
+const PARTS = [
+  [1,  'ssd.nvme',        'idle',  1.25, 256 * MB], [2,  'ram.ddr5',        'type',  1.25, 1 * GB],
+  [3,  'psu.titanium',    'all',   1.15, 6 * GB],   [4,  'cooler.liquid',   'combo', 2,    40 * GB],
+  [5,  'nic.10g',         'idle',  1.5,  256 * GB], [6,  'usb.rubberducky', 'type',  2,    1.5 * TB],
+  [7,  'wifi.pineapple',  'disc',  .9,   8 * TB],   [8,  'gpu.rtx',         'all',   1.5,  48 * TB],
+  [9,  'tor.relay',       'idle',  2,    256 * TB], [10, 'zeroday.vault',   'type',  3,    1.5 * PB],
+  [11, 'rootkit.fw',      'rk',    1.25, 8 * PB],   [12, 'asic.farm',       'all',   2,    48 * PB],
+  [13, 'quantum.chip',    'idle',  3,    256 * PB], [14, 'ai.cracker',      'all',   3,    1.5 * EB],
+  [15, 'bgp.hijack',      'disc',  .85,  3 * EB],   [16, 'dyson.rack',      'all',   5,    12 * EB],
+].map(([id, name, kind, v, cost]) => ({ id, name, kind, v, cost }));
+const hasPart = id => !!(state.stats.parts && state.stats.parts[id]);
+const partMult = kind => PARTS.reduce((m, p) => p.kind === kind && hasPart(p.id) ? m * p.v : m, 1);
+const discMult = () => partMult('disc');
+const presMult = () => 1 + 0.1 * (state.stats.rk || 0);                 // +10% em tudo por root key
+const RK_BASE = 64 * MB;                                               // ganho da run p/ a 1ª root key
+const rkGain = () => Math.floor(Math.sqrt(Math.max(0, state.stats.runEarned || 0) / RK_BASE) * partMult('rk'));
+const cost = u => Math.ceil(u.baseCost * Math.pow(u.scale, state.owned[u.id] || 0) * discMult());
+const bps = () => UPGRADES.filter(u=>u.type==='passive')
+  .reduce((s,u)=> s + upPower(u), 0) * partMult('idle') * partMult('all') * presMult() * achMult();
+const perChar = () => (1 + UPGRADES.filter(u=>u.type==='active')
+  .reduce((s,u)=> s + upPower(u), 0)) * partMult('type') * partMult('all') * presMult() * achMult();
+const comboCap = () => 5 + PARTS.reduce((m, p) => p.kind === 'combo' && hasPart(p.id) ? m + p.v : m, 0) + perkLvl('combo');
+const comboMult = () => Math.min(comboCap(), 1 + state.combo * 0.1);
+// WPM: no farm mostra a média da sessão atual (começa em 0). Fora dele, a média das sessões registradas.
+const avgWpm = () => state.stats.wpmCount ? state.stats.wpmSum / state.stats.wpmCount : 0;
+const wpm = () => Math.round(state.mode === 'FARM' ? state.wpmView : avgWpm());
+function registerSession(){      // ao sair do farm: grava a média da sessão (até a última tecla certa)
+  const S = state.stats, el = Math.max(3000, state.farmLast - state.farmStart);
+  if(!state.farmStart || state.farmChars < 10 || el < 5000) return;   // sessão curta demais não entra na média
+  const avg = (state.farmChars / 5) / (el / 60000);
+  S.wpmSum += avg; S.wpmCount++; S.lastAvg = avg; S.bestWpm = Math.max(S.bestWpm, avg);
+  print(L2(`[WPM] sessão registrada: ${avg.toFixed(1)} | média das sessões: ${(S.wpmSum / S.wpmCount).toFixed(1)} (${S.wpmCount})`, `[WPM] session recorded: ${avg.toFixed(1)} | sessions average: ${(S.wpmSum / S.wpmCount).toFixed(1)} (${S.wpmCount})`), 'dim');
+}
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(2)+'k' : n.toFixed(n<100?1:0);
+// Formata bytes (ou bits, com bits=true) em unidades reais, base 1024
+function fmtB(n, bits){
+  const u = bits ? ['b','Kb','Mb','Gb','Tb','Pb','Eb','Zb','Yb','Rb','Qb'] : ['B','KB','MB','GB','TB','PB','EB','ZB','YB','RB','QB'];
+  if(!isFinite(n)) return '∞';
+  n = Math.max(0, n);
+  let i = 0; while(n >= 1024 && i < u.length - 1){ n /= 1024; i++; }
+  if(i === u.length - 1 && n >= 1024) return n.toExponential(2) + ' ' + u[i];
+  const d = i === 0 ? (n < 100 && Math.abs(n - Math.round(n)) > 0.05 ? 1 : 0) : (n < 10 ? 2 : n < 100 ? 1 : 0);
+  return n.toFixed(d) + ' ' + u[i];
+}
+const upDesc = u => '+' + fmtB(u.value) + (u.type === 'active' ? L2('/caractere', '/char') : '/s');
+// >>> Pacotes de comandos: liberam por caracteres digitados (at). Para novos pacotes, adicione aqui.
+const PACKS = [
+  { id: 'git', at: 500, mult: 1.2, lines: ['git status', 'git add -A && git commit -m "fix"', 'git checkout -b feature/login', 'git push origin main --force-with-lease', 'git rebase -i HEAD~3', 'git log --oneline --graph --all'] },
+  { id: 'docker', at: 1500, mult: 1.4, lines: ['docker ps -a', 'docker build -t app:latest .', 'docker run -d -p 8080:80 --name web nginx', 'docker compose up --build -d', 'docker exec -it web /bin/sh', 'docker system prune -af --volumes'] },
+  { id: 'sql', at: 3500, mult: 1.6, lines: ['SELECT * FROM users WHERE id = 42;', 'CREATE INDEX idx_email ON users(email);', 'SELECT name, COUNT(*) FROM logs GROUP BY name;', 'DROP TABLE IF EXISTS temp_data;', 'DELETE FROM sessions WHERE expires < NOW();', 'UPDATE accounts SET balance = 0 WHERE role = "guest";'] },
+  { id: 'kubectl', at: 7000, mult: 1.9, lines: ['kubectl get pods -n production', 'kubectl apply -f deployment.yaml', 'kubectl logs -f deploy/api --tail=100', 'kubectl rollout restart deployment/web', 'kubectl exec -it pod/api-7d9f -- bash', 'kubectl scale deploy/api --replicas=5'] },
+  { id: 'aws', at: 12000, mult: 2.4, lines: ['aws s3 ls s3://backups --recursive', 'aws ec2 describe-instances --region us-east-1', 'aws iam list-users --output table', 'aws lambda invoke --function-name sync out.json', 'aws s3 sync ./dist s3://my-site --delete', 'aws cloudformation deploy --stack-name core --template-file t.yml'] },
+];
+function farmPool(){
+  const lines = CODE_LINES.concat(PHRASES[lang()] || PHRASES.pt);
+  const pool = lines.map(text => ({ text, reward: Math.max(12, Math.round(text.length * 0.65)) * perChar() }));
+  PACKS.forEach(pk => { if(state.totalTyped >= pk.at) pk.lines.forEach(text => { const q = { text, reward: Math.max(12, Math.round(text.length * 0.65)) * perChar() * pk.mult }; pool.push(q, q); }); });   // pacotes novos aparecem 2x mais
+  return pool;
+}
+function uptimeStr(){
+  const s = Math.floor((Date.now() - bootAt) / 1000);
+  const m = Math.floor(s / 60), h = Math.floor(m / 60);
+  const pad = n => String(n).padStart(2, '0');
+  return pad(h) + ':' + pad(m % 60) + ':' + pad(s % 60);
+}
+
+/* =========================================================
+   3b. ÁUDIO DE TECLA
+   ========================================================= */
+let audioCtx = null, noiseBuf = null, lastBackSfx = 0;
+
+function ensureAudio(){
+  if(!state.settings.sound) return null;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return null;
+  if(!audioCtx) audioCtx = new AC();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  if(!noiseBuf){
+    const n = Math.floor(audioCtx.sampleRate * 0.05);
+    noiseBuf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for(let i=0;i<n;i++) data[i] = Math.random() * 2 - 1;
+  }
+  return audioCtx;
+}
+function sfxGain(){
+  const v = Math.max(0, Math.min(100, +state.settings.volume || 0));
+  return (v / 100) * 0.45;
+}
+function beep(ctx, {type='sine', freq=440, freqEnd, t, dur=0.04, amp=0.1, delay=0}){
+  const start = t + delay;
+  const osc = ctx.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, start);
+  if(freqEnd) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), start + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(Math.max(0.0001, amp), start);
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + dur + 0.01);
+}
+function snap(ctx, {freq=3200, t, amp=0.2, dur=0.022}){
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = freq;
+  bp.Q.value = 5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(Math.max(0.0001, amp), t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(ctx.destination);
+  src.start(t);
+  src.stop(t + dur + 0.01);
+}
+function playSfx(kind, extra){
+  const ctx = ensureAudio();
+  if(!ctx) return;
+  const t0 = ctx.currentTime;
+  const vol = sfxGain();
+  const jitter = ((extra && extra.pitch) || 0) + (state.mode === 'FARM' ? Math.min(700, state.combo * 15) : 0) + ((THEMES.find(x => x.id === state.theme) || {}).snd || 0);   // cada tema tem um timbre de tecla
+  if(kind === 'click'){
+    beep(ctx, {type:'square', freq: 2300 + jitter, freqEnd: 820 + jitter * 0.2, t: t0, dur: 0.022, amp: vol * 0.09});
+    snap(ctx, {freq: 3000 + jitter, t: t0, amp: vol * 0.55, dur: 0.02});
+    beep(ctx, {type:'sine', freq: 170 + jitter * 0.03, freqEnd: 90, t: t0, dur: 0.04, amp: vol * 0.22});
+  } else if(kind === 'back'){
+    snap(ctx, {freq: 1800, t: t0, amp: vol * 0.4, dur: 0.018});
+    beep(ctx, {type:'triangle', freq: 420, freqEnd: 180, t: t0, dur: 0.035, amp: vol * 0.16});
+  } else if(kind === 'enter'){
+    snap(ctx, {freq: 1400, t: t0, amp: vol * 0.5, dur: 0.03});
+    beep(ctx, {type:'square', freq: 520, freqEnd: 220, t: t0, dur: 0.05, amp: vol * 0.14});
+    beep(ctx, {type:'sine', freq: 140, freqEnd: 70, t: t0, dur: 0.07, amp: vol * 0.2});
+  } else if(kind === 'error'){
+    snap(ctx, {freq: 400, t: t0, amp: vol * 0.45, dur: 0.04});
+    beep(ctx, {type:'sawtooth', freq: 160, freqEnd: 70, t: t0, dur: 0.09, amp: vol * 0.18});
+  } else if(kind === 'ok'){
+    beep(ctx, {type:'square', freq: 880, freqEnd: 880, t: t0, dur: 0.05, amp: vol * 0.12});
+    beep(ctx, {type:'square', freq: 1320, freqEnd: 1320, t: t0, dur: 0.07, amp: vol * 0.1, delay: 0.045});
+    snap(ctx, {freq: 2500, t: t0, amp: vol * 0.25, dur: 0.02});
+  }
+}
+
+/* =========================================================
+   4. UI / APARÊNCIA
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const term = $('term'), output = $('output'), ptext = $('ptext'), cursorEl = $('cursor');
+
+function print(text, cls=''){
+  const d = document.createElement('div');
+  d.className = 'line ' + cls;
+  d.textContent = text;
+  output.appendChild(d);
+  output.scrollTop = output.scrollHeight;
+  return d;
+}
+function updateHeader(){
+  $('statusbar').textContent =
+    `${state.playerName || 'root'}@${state.nodeId}  BYTES ${fmtB(state.bytes)}   ${t('gen')} ${fmtB(bps())}/s   WPM ${wpm()}   COMBO x${comboMult().toFixed(1)}   UP ${uptimeStr()}   LINK UP`;
+}
+function promptPrefix(){
+  return state.mode === 'FREE' ? state.settings.prompt : t('farm_prompt');
+}
+function renderPrompt(){
+  ptext.textContent = promptPrefix() + (state.mode === 'FREE' ? state.buffer : '');
+}
+let challengeEl = null;
+function renderChallenge(){
+  if(!challengeEl) return;
+  const c = state.cmd.text;
+  challengeEl.innerHTML = '';
+  for(let i=0;i<c.length;i++){
+    const s = document.createElement('span');
+    s.textContent = c[i];
+    s.className = i < state.pos ? (i === state.pos - 1 ? 'ok hit' : 'ok') : (i === state.pos ? 'cur' : 'todo');
+    challengeEl.appendChild(s);
+  }
+  const bar = document.createElement('div'); bar.className = 'lbar'; const bi = document.createElement('i'); bi.style.width = (state.pos / c.length * 100) + '%';
+  bar.appendChild(bi); challengeEl.appendChild(bar);
+  if(state.pos > 0) sparkBurst(challengeEl.children[state.pos - 1]);        // faíscas na letra recém-digitada       // barra de progresso da linha
+}
+
+function applyLangChrome(){
+  const L = lang();
+  document.documentElement.lang = L === 'en' ? 'en' : 'pt-BR';
+  $('langbtn').textContent = L.toUpperCase();
+  $('langbtn').title = t('lang_hint');
+}
+function applyAppearance(){
+  const theme = THEMES.find(x => x.id === state.theme) || THEMES[0];
+  const r = document.documentElement;
+  r.style.setProperty('--fg', theme.fg);
+  r.style.setProperty('--bg', theme.bg);
+  r.style.setProperty('--glow', theme.glow);
+  r.style.setProperty('--dim', theme.dim);
+  spin.fg = theme.fg;
+  const T = theme, setv = (k, v) => r.style.setProperty(k, v);
+  setv('--fs', (state.settings.font * (T.fsm || 1)).toFixed(1) + 'px');
+  setv('--ff', T.font); setv('--ls', (T.ls || 0) + 'em');
+  setv('--bw', (T.bw || 1) + 'px'); setv('--bs', T.bs || 'solid');
+  setv('--scan', T.scan ?? .28); setv('--vig', T.vig ?? .6);
+  setv('--err', T.err || '#ff3b3b'); setv('--warn', T.warn || '#ffd23b');
+  const gk = T.gk ?? 1; setv('--tsh', gk > 0 ? `0 0 ${(6 * gk).toFixed(1)}px rgba(${T.glow},${Math.min(1, .6 * gk).toFixed(2)})` : 'none');
+  const fxd = THEME_FX[T.fx]; setv('--bgfx', fxd ? fxd[0].split('@G@').join(T.glow) : 'none'); setv('--bgs', fxd ? fxd[1] : 'auto');
+  document.body.classList.toggle('th-halloween', T.id === 'halloween');                       // liga os efeitos do tema Halloween
+  if(T.id === 'halloween'){ const nw = Date.now(); hwT = { bat: nw + 2000, ghost: nw + 12000, bolt: nw + 6000 }; }
+  document.body.classList.toggle('no-crt', !state.settings.crt);
+  document.body.classList.toggle('no-glow', !state.settings.glow);
+  term.classList.toggle('hide-status', !state.settings.status);
+  cursorEl.className = state.settings.cursor;
+  cursorEl.innerHTML = '&nbsp;';
+  applyLangChrome();
+}
+function setLang(next, silent){
+  const L = next === 'en' ? 'en' : 'pt';
+  if(state.settings.lang === L && silent) { applyLangChrome(); return; }
+  state.settings.lang = L;
+  applyAppearance();
+  updateHeader();
+  renderPrompt();
+  saveGame();
+  if(!silent) print(t('lang_switched'), 'dim');
+}
+
+function ownsTheme(id){ return state.themesOwned.includes(id); }
+
+function parseLangToken(v){
+  const x = (v || '').toLowerCase();
+  if(['pt','pt-br','ptbr','portugues','português','portuguese'].includes(x)) return 'pt';
+  if(['en','eng','english','ingles','inglês'].includes(x)) return 'en';
+  return null;
+}
+
+/* =========================================================
+   5. MODO LIVRE — COMANDOS DO SISTEMA
+   ========================================================= */
+const L2 = (pt, en) => lang() === 'en' ? en : pt;
+const eventLog = [], cds = {};
+function logEvent(m){ eventLog.push(new Date().toTimeString().slice(0, 8) + '  ' + m); if(eventLog.length > 40) eventLog.shift(); }
+const cdLeft = k => Math.max(0, Math.ceil(((cds[k] || 0) - Date.now()) / 1000));
+const startCd = (k, sec) => { cds[k] = Date.now() + sec * 1000; };
+const RANKS = [[0,'script.kiddie'],[200,'packet.sniffer'],[1000,'shell.runner'],[3000,'root.ghost'],[8000,'mesh.operator'],[20000,'zero.day'],[50000,'phantom.admin']];
+function rankInfo(){ let i = 0; RANKS.forEach((r, k) => { if(state.totalTyped >= r[0]) i = k; }); return { cur: RANKS[i], next: RANKS[i + 1] }; }
+// Compra em lote: soma o preço de cada unidade (o preço sobe a cada compra)
+function bulkCost(u, n){ let s = 0; const o = state.owned[u.id] || 0; for(let i = 0; i < n; i++) s += Math.ceil(u.baseCost * Math.pow(u.scale, o + i) * discMult()); return s; }
+function maxAffordable(u){ let n = 0, s = 0; const o = state.owned[u.id] || 0;
+  for(; n < 1000; n++){ const c = Math.ceil(u.baseCost * Math.pow(u.scale, o + n) * discMult()); if(s + c > state.bytes) break; s += c; } return n; }
+function doBuy(u, n, quiet){
+  const total = bulkCost(u, n);
+  if(state.bytes < total) return print(t('no_bytes', { n: fmtB(total) }), 'err');
+  const before = reactorCounts().n, o0 = state.owned[u.id] || 0; state.bytes -= total; state.owned[u.id] = (state.owned[u.id] || 0) + n; fxEvent('buy', before, n, u.type);
+  if(msCount(state.owned[u.id]) > msCount(o0)){            // marco: o upgrade dobra de rendimento
+    state.stats.msCount++; print(L2(`★ MARCO: ${u.name} x${state.owned[u.id]} = rendimento x2!`, `★ MILESTONE: ${u.name} x${state.owned[u.id]} = output x2!`), 'warn');
+    fxEvent('banner', 'MILESTONE // ' + u.name + ' x' + state.owned[u.id]); fxEvent('waves', 3);
+  }
+  tut('buy');
+  if(!quiet) print(t('installed', { name: u.name, n: state.owned[u.id], c: fmtB(cost(u)) }) + (n > 1 ? `  (-${fmtB(total)})` : ''));
+  logEvent(`install ${u.name} x${n}`); playSfx('ok'); saveGame(); updateHeader();
+}
+
+const SYSTEM_COMMANDS = {
+  help(){
+    print(t('help_title'));
+    const H = [
+      ['help', 'lista os comandos', 'list commands'],
+      ['store [themes|parts]', 'o que dá para comprar: upgrades (padrão), temas ou peças', 'what you can buy: upgrades (default), themes or parts'],
+      ['buy <id|nome> [qtd]', 'compra upgrade (id), tema ou peça (nome). Ex: buy 2 5 | buy 2 max | buy amber | buy ssd.nvme', 'buy an upgrade (id), theme or part (name). E.g. buy 2 5 | buy 2 max | buy amber | buy ssd.nvme'],
+      ['theme <id>', 'aplica tema já comprado. Ex: theme ice', 'apply an owned theme. E.g. theme ice'],
+      ['settings', 'mostra as configurações', 'show settings'],
+      ['set <chave> <valor>', 'muda config. Ex: set font 20 | set sound off', 'change a setting. E.g. set font 20 | set sound off'],
+      ['lang <pt|en>', 'troca o idioma', 'switch language'],
+      ['name [novo]', 'mostra ou muda seu nome', 'show or change your name'],
+      ['tasks | farm', 'modo digitação: copie a linha para ganhar bytes. ESC sai', 'typing mode: copy the line to earn bytes. ESC leaves'],
+      ['status', 'resumo do progresso', 'progress summary'],
+      ['units', 'tabela de unidades (bits, KB, MB...)', 'unit table (bits, KB, MB...)'],
+      ['themes | hardware', 'abre a janela UPGRADES (ou use o botão): temas ou peças, com compra por clique', 'opens the UPGRADES window (or use the button): themes or parts, buy by click'],
+      ['prestige', 'reinstala o sistema: zera bytes e upgrades, ganha root keys (+10% em tudo cada)', 'reinstall: wipes bytes and upgrades, grants root keys (+10% to everything each)'],
+      ['perks [id]', 'bônus permanentes comprados com pontos de prestige (lista ou compra)', 'permanent bonuses bought with prestige points (list or buy)'],
+      ['achievements', 'conquistas e progresso (+2% em tudo cada)', 'achievements and progress (+2% to everything each)'],
+      ['history', 'comandos anteriores (↑ ↓ navegam)', 'previous commands (↑ ↓ to browse)'],
+      ['clear', 'limpa o terminal', 'clear the terminal'],
+      ['whoami', 'seu rank e o que falta para o próximo', 'your rank and what is left for the next'],
+      ['hostname [nome]', 'mostra ou renomeia o nó', 'show or rename the node'],
+      ['uname', 'specs do sistema (cores, daemons)', 'system specs (cores, daemons)'],
+      ['ps', 'daemons ativos e o B/s de cada', 'active daemons and their B/s'],
+      ['netstat', 'conexões dos daemons', 'daemon connections'],
+      ['ifconfig', 'rede: caracteres e B/s', 'network: chars and B/s'],
+      ['logs', 'últimos eventos do jogo', 'latest game events'],
+      ['scan', 'bônus de bytes (espera 60s)', 'byte bounty (60s cooldown)'],
+      ['trace', 'turbo no reator (espera 45s)', 'reactor boost (45s cooldown)'],
+      ['reset', 'recomeça do zero (pede 2 confirmações)', 'start over from scratch (asks 2 confirmations)'],
+    ];
+    H.forEach(h => print('  ' + h[0].padEnd(22) + L2(h[1], h[2])));
+  },
+  hardware(){ openHw('parts'); },
+  themes(){ openHw('themes'); },
+  prestige(){
+    const S = state.stats, g = rkGain();
+    print('=== PRESTIGE // REINSTALL ===');
+    print(L2(`Ganho desta run: ${fmtB(S.runEarned || 0)} | Root keys: ${S.rk || 0} (x${presMult().toFixed(2)})`, `This run: ${fmtB(S.runEarned || 0)} | Root keys: ${S.rk || 0} (x${presMult().toFixed(2)})`));
+    if(g < 1) return print(L2(`Precisa de ${fmtB(RK_BASE)} ganhos na run para a 1ª root key.`, `You need ${fmtB(RK_BASE)} earned in this run for the 1st root key.`), 'dim');
+    print(L2(`Você ganharia +${g} root keys: x${presMult().toFixed(2)} -> x${(1 + .1 * ((S.rk || 0) + g)).toFixed(2)} em tudo.`, `You would gain +${g} root keys: x${presMult().toFixed(2)} -> x${(1 + .1 * ((S.rk || 0) + g)).toFixed(2)} on everything.`));
+    print(L2('Zera: bytes e upgrades. Mantém: peças, temas, nome, config, stats e root keys.', 'Resets: bytes and upgrades. Keeps: parts, themes, name, settings, stats and root keys.'), 'warn');
+    const need = RK_BASE * Math.pow((g + 1) / partMult('rk'), 2);       // prévia: quanto falta para +1 key
+    print(L2(`Próxima key: faltam ${fmtB(Math.max(0, need - (S.runEarned || 0)))} de ganho na run. Pontos de perk ao prestigiar: +${1 + (g >= 10) + (g >= 100) + (g >= 1000)} (veja "perks")`, `Next key: ${fmtB(Math.max(0, need - (S.runEarned || 0)))} more earned this run. Perk points on prestige: +${1 + (g >= 10) + (g >= 100) + (g >= 1000)} (see "perks")`), 'dim');
+    state.pending = { prestige: 1 };
+    print(L2('Confirmar? (s/n)', 'Confirm? (y/n)'), 'warn');
+  },
+  perks(args){
+    const S = state.stats, id = (args[0] || '').toLowerCase();
+    if(!id){
+      print(L2(`=== PERKS === pontos: ${S.pp || 0} (ganhos ao prestigiar)`, `=== PERKS === points: ${S.pp || 0} (earned by prestiging)`));
+      PERKS.forEach(p => { const l = perkLvl(p.id); print(`  ${p.id.padEnd(6)} ${L2(p.n[0], p.n[1]).padEnd(21)} lv ${l}/${p.max}  ${l < p.max ? p.d(l + 1) + ' [' + p.cost(l + 1) + ' pt]' : 'MAX'}`); });
+      return print(L2('Use: perks <id> para comprar o próximo nível', 'Use: perks <id> to buy the next level'), 'dim');
+    }
+    const p = PERKS.find(x => x.id === id); if(!p) return print(t('not_found'), 'err');
+    const l = perkLvl(p.id); if(l >= p.max) return print('MAX', 'dim');
+    const c = p.cost(l + 1); if((S.pp || 0) < c) return print(L2(`Pontos insuficientes (${S.pp || 0}/${c})`, `Not enough points (${S.pp || 0}/${c})`), 'err');
+    S.pp -= c; S.perks[p.id] = l + 1; print(L2(`Perk ${p.id} nível ${l + 1}: ${p.d(l + 1)}`, `Perk ${p.id} level ${l + 1}: ${p.d(l + 1)}`), 'warn'); playSfx('ok'); saveGame();
+  },
+  achievements(){
+    const S = state.stats, n = ACH.filter(a => S.ach[a.id]).length;
+    print(L2(`=== CONQUISTAS ${n}/${ACH.length} (+${n * 2}% em tudo) ===`, `=== ACHIEVEMENTS ${n}/${ACH.length} (+${n * 2}% to everything) ===`));
+    ACH.forEach(a => { const d = S.ach[a.id], f = a.b ? fmtB : (v => Math.floor(v));
+      print(`  ${d ? '[x]' : '[ ]'} ${L2(a.pt, a.en).padEnd(22)} ${d ? '' : f(Math.min(a.cur(), a.tg)) + ' / ' + f(a.tg)}`, d ? '' : 'dim'); });
+  },
+  units(){
+    print(L2('=== UNIDADES ===', '=== UNITS ==='));
+    print('  8 bits (b) = 1 B');
+    print('  1 KB = 1024 B      1 MB = 1024 KB');
+    print('  1 GB = 1024 MB     1 TB = 1024 GB');
+    print('  PB, EB, ZB, YB, RB, QB: x1024 ' + L2('cada', 'each'));
+    print(L2(`  você tem: ${fmtB(state.bytes)} = ${fmtB(state.bytes * 8, true)}`, `  you have: ${fmtB(state.bytes)} = ${fmtB(state.bytes * 8, true)}`));
+  },
+  name(args){
+    const v = args.join(' ').trim();
+    if(!v) return print(L2('Seu nome: ', 'Your name: ') + (state.playerName || '-'));
+    const n = cleanName(v);
+    if(!n) return print(L2('Nome inválido. Use 2 a 16 caracteres (letras, números, espaço, _ ou -).', 'Invalid name. Use 2-16 characters (letters, digits, space, _ or -).'), 'err');
+    state.playerName = n; saveGame(); updateHeader();
+    print(L2('Nome alterado para ', 'Name changed to ') + n);
+  },
+  reset(){
+    state.pending = { reset: 1 };
+    print(L2('ATENÇÃO: isso apaga TUDO (bytes, upgrades, temas, estatísticas, nome).', 'WARNING: this erases EVERYTHING (bytes, upgrades, themes, stats, name).'), 'err');
+    print(L2('Tem certeza de que quer recomeçar do zero? (s/n)', 'Are you sure you want to start over? (y/n)'), 'warn');
+  },
+  store(args){
+    const w = (args[0] || '').toLowerCase();
+    if(['themes', 'theme', 'temas', 'tema'].includes(w)){
+      print(L2('=== STORE // TEMAS ===', '=== STORE // THEMES ==='));
+      THEMES.forEach(th => {
+        const owned = ownsTheme(th.id), active = state.theme === th.id;
+        const tag = active ? '  ' + t('active') : (owned ? '  ' + t('have') : '');
+        const price = owned ? t('owned') : (th.cost === 0 ? t('free') : fmtB(th.cost));
+        print(`  ${th.id.padEnd(8)} ${th.name.padEnd(18)} ${String(price).padStart(14)}${tag}  [${th.font.split(',')[0].replace(/'/g, '')}]`, owned || state.bytes >= th.cost ? '' : 'dim');
+      });
+      return print(L2('Use: buy <tema> (compra e aplica) | theme <id> (aplica um tema seu)', 'Use: buy <theme> (buy and apply) | theme <id> (apply one you own)'));
+    }
+    if(['parts', 'part', 'pecas', 'peças', 'hardware'].includes(w)){
+      print(L2('=== STORE // PEÇAS (permanentes) ===', '=== STORE // PARTS (permanent) ==='));
+      PARTS.forEach(q => {
+        const o = hasPart(q.id);
+        print(`  ${q.name.padEnd(16)} ${(o ? L2('instalada', 'installed') : fmtB(q.cost)).padStart(12)}  ${partDesc(q)}`, o || state.bytes >= q.cost ? '' : 'dim');
+      });
+      return print(L2('Use: buy <nome da peça>. Ex: buy ssd.nvme', 'Use: buy <part name>. E.g. buy ssd.nvme'));
+    }
+    print(t('store_title')); tut('store');
+    let hid = 0;
+    UPGRADES.forEach(u => {                                  // upgrades só aparecem com 25% do preço; antes, ???
+      const n = state.owned[u.id] || 0, c = cost(u), S = state.stats;
+      if(!S.seen[u.id] && (n > 0 || state.bytes >= c * .25)) S.seen[u.id] = 1;
+      if(!S.seen[u.id]){ if(hid++ < 2) print(`[${String(u.id).padStart(2)}] ${'???'.padEnd(17)} ${'???'.padStart(10)}  ${L2('(revela com 25% do preço)', '(revealed at 25% of the price)')}`, 'dim'); return; }
+      const nm = nextMs(n);
+      print(`[${String(u.id).padStart(2)}] ${u.name.padEnd(17)} ${fmtB(c).padStart(10)}  (x${n})${nm ? '  ▸' + nm + '=x2' : ''}  ${upDesc(u)}`, state.bytes >= c ? '' : 'dim');
+    });
+    print(t('use_buy'));
+    print(L2('Mais: store themes | store parts', 'More: store themes | store parts'), 'dim');
+  },
+  buy(args){
+    const key = (args[0] || '').toLowerCase();
+    if(!key) return print(t('buy_usage'), 'err');
+    const theme = THEMES.find(x => x.id === key || x.name === key);
+    if(theme){
+      if(ownsTheme(theme.id)){
+        state.theme = theme.id;
+        applyAppearance();
+        print(t('theme_owned', { name: theme.name }));
+        saveGame();
+        return;
+      }
+      if(state.bytes < theme.cost) return print(t('no_bytes', { n: fmtB(theme.cost) }), 'err');
+      state.bytes -= theme.cost;
+      state.themesOwned.push(theme.id);
+      state.theme = theme.id;
+      applyAppearance();
+      print(t('theme_unlocked', { name: theme.name }));
+      saveGame(); updateHeader();
+      return;
+    }
+    const part = PARTS.find(x => x.name === key);                    // peça de hardware, por nome
+    if(part){
+      if(hasPart(part.id)) return print(L2('Peça já instalada.', 'Part already installed.'), 'dim');
+      if(state.bytes < part.cost) return print(t('no_bytes', { n: fmtB(part.cost) }), 'err');
+      return buyPart(part);
+    }
+    const u = UPGRADES.find(x => String(x.id) === key);
+    if(!u) return print(t('not_found'), 'err');
+    if(args[1] === undefined) return doBuy(u, 1);          // sem quantidade: compra 1 direto
+    const raw = args[1].toLowerCase();
+    const qty = ['max', 'all', 'tudo'].includes(raw) ? maxAffordable(u) : parseInt(raw.replace(/^x/, ''), 10);
+    if(!Number.isFinite(qty) || qty < 1 || qty > 1000)
+      return print(L2('Quantidade inválida (1-1000 ou max). Se max = 0, faltam bytes.', 'Invalid quantity (1-1000 or max). If max = 0 you lack bytes.'), 'err');
+    const total = bulkCost(u, qty);
+    print(L2(`${qty}x ${u.name} custa ${fmtB(total)} (você tem ${fmtB(state.bytes)})`, `${qty}x ${u.name} costs ${fmtB(total)} (you have ${fmtB(state.bytes)})`));
+    if(state.bytes < total) return print(t('no_bytes', { n: fmtB(total) }), 'err');
+    state.pending = { u, qty };
+    print(L2('Confirmar compra? (s/n)', 'Confirm purchase? (y/n)'), 'warn');
+  },
+  theme(args){
+    const id = (args[0] || '').toLowerCase();
+    if(!id) return print(t('theme_usage'), 'err');
+    const th = THEMES.find(x => x.id === id);
+    if(!th) return print(t('theme_missing'), 'err');
+    if(!ownsTheme(th.id)) return print(t('theme_locked', { id: th.id }), 'err');
+    state.theme = th.id;
+    applyAppearance();
+    print(t('theme_active', { name: th.name }));
+    saveGame();
+  },
+  lang(args){
+    const parsed = parseLangToken(args[0]);
+    if(!parsed){
+      print('lang: ' + lang().toUpperCase());
+      print('  lang pt | lang en');
+      return;
+    }
+    setLang(parsed, false);
+  },
+  settings(){
+    const s = state.settings;
+    const th = THEMES.find(x => x.id === state.theme);
+    print('=== SETTINGS ===');
+    print(`  lang     ${s.lang}`);
+    print(`  theme    ${state.theme} (${th ? th.name : '?'})`);
+    print(`  font     ${s.font}px   (set font ${FONT_MIN}-${FONT_MAX})`);
+    print(`  crt      ${s.crt ? 'on' : 'off'}   (set crt on|off)`);
+    print(`  glow     ${s.glow ? 'on' : 'off'}   (set glow on|off)`);
+    print(`  cursor   ${s.cursor}   (set cursor block|bar|underline)`);
+    print(`  status   ${s.status ? 'on' : 'off'}   (set status on|off)`);
+    print(`  sound    ${s.sound ? 'on' : 'off'}   (set sound on|off)`);
+    print(`  volume   ${s.volume}   (set volume 0-100)`);
+    print(`  prompt   ${JSON.stringify(s.prompt)}   (set prompt <text>)`);
+  },
+  set(args){
+    const key = (args[0] || '').toLowerCase();
+    const rest = args.slice(1).join(' ').trim();
+    if(!key){
+      print(t('set_usage'));
+      print(t('set_keys'));
+      return;
+    }
+    const onoff = v => {
+      const x = v.toLowerCase();
+      if(['on','true','1','sim','yes'].includes(x)) return true;
+      if(['off','false','0','nao','não','no'].includes(x)) return false;
+      return null;
+    };
+    if(key === 'font'){
+      const n = parseInt(rest, 10);
+      if(!Number.isFinite(n) || n < FONT_MIN || n > FONT_MAX)
+        return print(t('font_err', { a: FONT_MIN, b: FONT_MAX }), 'err');
+      state.settings.font = n;
+    } else if(key === 'lang' || key === 'language' || key === 'idioma'){
+      const parsed = parseLangToken(rest);
+      if(!parsed) return print('Usage: set lang pt|en', 'err');
+      setLang(parsed, false);
+      return;
+    } else if(key === 'crt' || key === 'glow' || key === 'status' || key === 'sound' || key === 'sfx'){
+      const v = onoff(rest);
+      const k = key === 'sfx' ? 'sound' : key;
+      if(v === null) return print(t('onoff_err', { k }), 'err');
+      state.settings[k] = v;
+    } else if(key === 'volume' || key === 'vol'){
+      const n = parseInt(rest, 10);
+      if(!Number.isFinite(n) || n < 0 || n > 100)
+        return print(t('vol_err'), 'err');
+      state.settings.volume = n;
+      state.settings.sound = n > 0;
+    } else if(key === 'cursor'){
+      const v = rest.toLowerCase();
+      if(!['block','bar','underline'].includes(v))
+        return print(t('cursor_err'), 'err');
+      state.settings.cursor = v;
+    } else if(key === 'prompt'){
+      if(!rest) return print(t('prompt_err'), 'err');
+      state.settings.prompt = rest.endsWith(' ') ? rest : rest + ' ';
+    } else if(key === 'theme' || key === 'color' || key === 'cor'){
+      return SYSTEM_COMMANDS.theme([rest.toLowerCase()]);
+    } else {
+      return print(t('unknown_key', { key }), 'err');
+    }
+    applyAppearance();
+    renderPrompt();
+    const shown = key === 'sfx' ? 'sound' : (key === 'vol' ? 'volume' : key);
+    print(`ok: ${shown} = ${shown === 'prompt' ? JSON.stringify(state.settings.prompt) : state.settings[shown]}`);
+    saveGame();
+    if(shown === 'sound' || shown === 'volume') playSfx('click');
+  },
+  config(args){ SYSTEM_COMMANDS.settings(args); },
+  cosmetics(){ SYSTEM_COMMANDS.shop(); },
+  tasks(){ enterFarm(); },
+  farm(){ enterFarm(); },
+  status(){
+    print(`node: ${state.nodeId}.mesh | uptime ${uptimeStr()} | LINK UP`);
+    print(`Bytes: ${fmtB(state.bytes)} (= ${fmtB(state.bytes * 8, true)}) | ${t('gen')}: ${fmtB(bps())}/s | WPM: ${wpm()}`);
+    print(`Bytes/char: ${fmtB(perChar())} | Combo: x${comboMult().toFixed(1)} | chars: ${state.totalTyped}`);
+    print(`theme: ${state.theme} | font: ${state.settings.font}px | lang: ${lang()}`);
+  },
+  clear(){ output.innerHTML = ''; fxEvent('glitch'); },
+  history(){
+    if(!state.history.length) return print(t('hist_empty'), 'dim');
+    state.history.forEach((h,i)=> print(`${String(i+1).padStart(3)}  ${h}`));
+  },
+  whoami(){
+    const r = rankInfo();
+    print(t('who'));
+    print((state.playerName || 'operator') + '@' + state.nodeId + '   rank: ' + r.cur[1]);
+    print(r.next
+      ? L2(`próximo rank: ${r.next[1]} em ${r.next[0] - state.totalTyped} caracteres`, `next rank: ${r.next[1]} in ${r.next[0] - state.totalTyped} chars`)
+      : L2('rank máximo alcançado.', 'max rank reached.'), 'dim');
+  },
+  hostname(args){
+    const n = (args[0] || '').toLowerCase();
+    if(!n) return print(t('host', { node: state.nodeId }));
+    if(!/^[a-z0-9-]{2,16}$/.test(n)) return print(L2('Uso: hostname <nome> (2-16 letras/números/-)', 'Usage: hostname <name> (2-16 letters/digits/-)'), 'err');
+    const old = state.nodeId;
+    if(state.settings.prompt === 'root@' + old + ':~# ') state.settings.prompt = 'root@' + n + ':~# ';
+    state.nodeId = n;
+    print(t('host', { node: n })); logEvent('hostname ' + old + ' -> ' + n);
+    renderPrompt(); updateHeader(); saveGame();
+  },
+  uname(){
+    const cpu = state.owned[1] || 0;
+    const dm = UPGRADES.filter(u => u.type === 'passive').reduce((s, u) => s + (state.owned[u.id] || 0), 0);
+    print(`GhostOS 5.${cpu} ${state.nodeId} cores=${1 + cpu} daemons=${dm} chars=${state.totalTyped} (ops-idle)`);
+  },
+  ps(){
+    print(t('ps_title') + '   CMD');
+    print('  1   ttyS0    init', 'dim');
+    print(' 37   pts/0    ghost-idle', 'dim');
+    const act = UPGRADES.filter(u => u.type === 'passive' && state.owned[u.id]);
+    act.forEach(u => print(String(100 + u.id).padStart(4) + '   pts/0    ' + u.name + ' x' + state.owned[u.id] + '   +' + fmtB(upPower(u)) + '/s'));
+    if(!act.length) print(L2('(nenhum daemon ativo — veja "store")', '(no active daemon — see "store")'), 'dim');
+  },
+  scan(){
+    const left = cdLeft('scan');
+    if(left > 0) return print(L2(`scan esfriando: ${left}s`, `scan cooling down: ${left}s`), 'err');
+    startCd('scan', 60); fxEvent('scan');
+    print(t('scan_start'), 'warn');
+    const hosts = [['relay.ghost', 'open   ssh', 1], ['vault.inner', 'open   https', 2.5], ['edge.west', 'open   wireguard', 1.5],
+                   ['core.null', 'filtered', 0], ['honeypot.dmz', 'open   ssh  (decoy)', 0]];
+    hosts.forEach(h => print('  ' + h[0].padEnd(16) + h[1], 'dim'));
+    const good = hosts.filter(h => h[2] > 0), h = good[Math.floor(Math.random() * good.length)];
+    const loot = Math.max(25, bps() * 20 * h[2]);
+    state.bytes += loot; spinAdd(loot, IDLE_W);
+    print(L2(`>> ${h[0]} vulnerável: +${fmtB(loot)} exfiltrados`, `>> ${h[0]} vulnerable: +${fmtB(loot)} exfiltrated`));
+    logEvent(`scan ${h[0]} +${fmtB(loot)}`); playSfx('ok'); updateHeader();
+  },
+  logs(){
+    print(t('logs_title'));
+    if(!eventLog.length) return print(L2('(sem eventos ainda)', '(no events yet)'), 'dim');
+    eventLog.slice(-12).forEach(l => print(l, 'dim'));
+  },
+  trace(){
+    const left = cdLeft('trace');
+    if(left > 0) return print(L2(`trace esfriando: ${left}s`, `trace cooling down: ${left}s`), 'err');
+    startCd('trace', 45);
+    print(t('trace_start'), 'warn');
+    print(' hop 1  gateway.local', 'dim'); print(' hop 2  relay.ghost', 'dim'); print(' hop 3  core.null', 'dim');
+    spinAdd(0, 0, 3.5); fxEvent('trace');
+    print(L2('trace completo. rotor em overdrive.', 'trace complete. rotor overdrive.'));
+    logEvent('trace core.null (overdrive)');
+  },
+  netstat(){
+    print('Proto  Local            State');
+    const act = UPGRADES.filter(u => u.type === 'passive' && state.owned[u.id]);
+    act.forEach(u => print('tcp    mesh>' + u.name.padEnd(13) + 'ESTABLISHED x' + state.owned[u.id], 'dim'));
+    if(!act.length) print(L2('(sem conexões)', '(no connections)'), 'dim');
+  },
+  ifconfig(){
+    print('eth0  UP  mesh-tunnel  rx ' + state.totalTyped + ' chars  tx ' + fmtB(bps()) + '/s', 'dim');
+    print('lo    UP  127.loop', 'dim');
+  },
+};
+
+function runSystemCommand(line){
+  print(promptPrefix() + line);
+  if(state.pending){                                        // aguardando confirmação s/n
+    const p = state.pending; state.pending = null;
+    const a = line.trim().toLowerCase(), yes = ['y', 'yes', 's', 'sim'].includes(a);
+    if(p.prestige){ if(yes) doPrestige(); else print(L2('prestige cancelado.', 'prestige cancelled.'), 'dim'); return; }
+    if(p.reset){                                            // reset: 2 confirmações
+      if(p.reset === 1 && yes){
+        state.pending = { reset: 2 };
+        print(L2('ÚLTIMO AVISO: digite RESETAR para apagar tudo (qualquer outra coisa cancela).', 'LAST WARNING: type WIPE to erase everything (anything else cancels).'), 'err');
+      } else if(p.reset === 2 && (a === 'resetar' || a === 'wipe')) wipeGame();
+      else print(L2('reset cancelado.', 'reset cancelled.'), 'dim');
+      return;
+    }
+    if(yes) doBuy(p.u, p.qty);
+    else print(L2('compra cancelada.', 'purchase cancelled.'), 'dim');
+    return;
+  }
+  const [name, ...args] = line.trim().split(/\s+/);
+  if(!name) return;
+  const raw = name.toLowerCase();
+  const mapped = ALIASES[raw] || raw;
+  const fn = SYSTEM_COMMANDS[mapped];
+  fn ? fn(args) : (print(t('unknown_cmd', { name }), 'err'), fxEvent('shake'));
+}
+
+/* =========================================================
+   6. MODO FARM
+   ========================================================= */
+function nextCommand(){
+  const pool = farmPool();
+  let c; do{ c = pool[Math.floor(Math.random() * pool.length)]; }
+  while(pool.length > 1 && state.cmd && c.text === state.cmd.text);
+  state.cmd = Object.assign({}, c, { gold: state.stats.done >= 3 && Math.random() < 0.06 * (1 + 0.5 * perkLvl('gold')) }); state.pos = 0; state.rawLog = ''; state.lineErr = 0;
+  challengeEl = document.createElement('div');
+  challengeEl.id = 'challenge'; if(state.cmd.gold) challengeEl.classList.add('gold');
+  output.appendChild(challengeEl);
+  renderChallenge();
+  output.scrollTop = output.scrollHeight;
+}
+function enterFarm(){
+  state.mode = 'FARM'; state.cmd = null; state.pending = null;
+  state.farmStart = 0; state.farmChars = 0; state.farmAvg = 0; state.farmEnter = Date.now(); state.stats.sessions++; state.wpmView = 0; state.farmLast = 0;
+  state.recBase = state.stats.bestWpm; state.recFired = false; fxEvent('farmOn'); tut('farm');
+  print(t('access'), 'warn');
+  print('  tty attached  //  ' + state.nodeId + '.mesh', 'dim');
+  print(t('farm_in'), 'warn');
+  nextCommand(); renderPrompt();
+}
+function exitFarm(){
+  fxEvent('farmOff'); state.stats.farmMs += Date.now() - state.farmEnter; registerSession();   // guarda a média do farm
+  state.farmStart = 0; state.farmChars = 0;
+  state.mode = 'FREE'; state.cmd = null; challengeEl = null; state.buffer = '';
+  print(t('farm_out'), 'warn');
+  renderPrompt(); saveGame();
+}
+function farmKey(e){
+  if(e.key === 'Escape'){ playSfx('enter'); return exitFarm(); }
+  if(e.key === 'Enter'){
+    playSfx('enter');
+    if(state.rawLog.endsWith('exit')) exitFarm();
+    state.rawLog = ''; return;
+  }
+  if(e.key.length !== 1) return;
+  if(e.repeat) return;
+  state.rawLog += e.key;
+  if(e.key === state.cmd.text[state.pos]){
+    state.pos++; state.totalTyped++;
+    if(!state.farmStart) state.farmStart = Date.now();
+    state.farmChars++; state.farmLast = Date.now(); fxEvent('key');
+    const g = perChar() * comboMult(); state.bytes += g; spinAdd(g, 1);
+    if(state.pos >= state.cmd.text.length) completeCommand();
+    else {
+      playSfx('click', { pitch: (e.key.charCodeAt(0) % 18) * 40 });
+      renderChallenge();
+    }
+  } else {
+    playSfx('error');
+    state.stats.errors++; onTypeError(); state.lineErr++;
+    if(state.cmd.gold){ state.cmd.gold = false; challengeEl.classList.remove('gold'); print(L2('★ linha dourada perdida', '★ golden line lost'), 'dim'); }
+    state.combo = 0;
+    challengeEl.classList.remove('shake'); void challengeEl.offsetWidth;
+    challengeEl.classList.add('shake');
+  }
+  updateHeader();
+}
+function completeCommand(){
+  playSfx('ok');
+  let gain = state.cmd.reward * comboMult(), tag = '';
+  if(state.lineErr === 0){ gain *= 1.25; state.stats.perfects++; tag = ' PERFECT'; }                       // linha perfeita: +25%
+  if(state.cmd.gold){ gain += Math.max(state.cmd.reward * 5, bps() * 120); state.stats.golds++; tag += ' ★GOLD';   // dourada: 5x ou 2 min de idle
+    fxEvent('banner', 'GOLDEN LINE // +' + fmtB(gain)); fxEvent('waves', 3); }
+  state.bytes += gain; state.combo++; spinAdd(gain, 1, 1.2); fxEvent('done', gain); state.stats.done++; state.stats.maxCombo = Math.max(state.stats.maxCombo, state.combo); logEvent(`farm +${fmtB(gain)} (x${comboMult().toFixed(1)})`);
+  { const kids = challengeEl.children; for(let k = 0; k < 5; k++) sparkBurst(kids[Math.floor(Math.random() * Math.max(1, kids.length - 1))]); }   // rajada ao completar
+  challengeEl.remove(); { const tm = $('term'); tm.classList.remove('lineflash'); void tm.offsetWidth; tm.classList.add('lineflash'); }
+  const flavor = hwOn() ? HW_FLAVOR[state.combo % 6] : t('flavor' + (state.combo % 6));
+  const l = print(`[OK] +${fmtB(gain)}${tag}  ${flavor}`);
+  l.classList.add('flash');
+  tut('done'); nextCommand(); saveGame();
+}
+
+/* =========================================================
+   7. CAPTURA DE TECLADO
+   ========================================================= */
+document.addEventListener('keydown', e => {
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.target && e.target.id === 'langbtn') return;
+  if(state.modal) return;       // janela de nome aberta: o <input> cuida das teclas
+  if(e.key === ' ' || e.key === 'Backspace' || e.key === 'Tab' || e.key === 'Escape' || e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+  ensureAudio(); fxActivity();
+
+  if(state.mode === 'FARM'){ farmKey(e); return; }
+
+  if(e.key === 'Enter'){
+    playSfx('enter');
+    const line = state.buffer; state.buffer = '';
+    state.histIdx = -1;
+    if(line.trim()){
+      state.history.push(line);
+      if(state.history.length > 50) state.history.shift();
+    }
+    runSystemCommand(line);
+    if(line.trim().toLowerCase() === 'exit') print(t('already_free'), 'dim');
+  } else if(e.key === 'Backspace'){
+    const now = Date.now();
+    if(!e.repeat || now - lastBackSfx > 55){
+      playSfx('back');
+      lastBackSfx = now;
+    }
+    state.buffer = state.buffer.slice(0,-1);
+  } else if(e.key === 'ArrowUp'){
+    if(!state.history.length) return;
+    if(state.histIdx < 0) state.histIdx = state.history.length - 1;
+    else state.histIdx = Math.max(0, state.histIdx - 1);
+    state.buffer = state.history[state.histIdx];
+  } else if(e.key === 'ArrowDown'){
+    if(state.histIdx < 0) return;
+    state.histIdx++;
+    if(state.histIdx >= state.history.length){ state.histIdx = -1; state.buffer = ''; }
+    else state.buffer = state.history[state.histIdx];
+  } else if(e.key.length === 1){
+    if(!e.repeat) playSfx('click', { pitch: (e.key.charCodeAt(0) % 18) * 40 });
+    state.buffer += e.key;
+  }
+  if(state.mode === 'FREE') renderPrompt();
+});
+function focusHidden(){ if(state.modal) return; $('hidden').focus(); }
+term.addEventListener('click', focusHidden);
+document.body.addEventListener('click', focusHidden);
+$('langbtn').addEventListener('click', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  setLang(lang() === 'pt' ? 'en' : 'pt', false);
+  focusHidden();
+});
+$('hidden').addEventListener('input', e => { e.target.value = ''; });
+
+/* =========================================================
+   8. LOOPS
+   ========================================================= */
+/* ---- 8a. ROTOR: gira conforme o fluxo de bytes. Digitar pesa 1.0, idle pesa IDLE_W ---- */
+const IDLE_W = 0.1;
+const spin = { ang: 0, ang2: 0, pulse: 0, rate: 0, kick: 0, err: 0, fg: '#00ff00', last: performance.now() };
+function spinAdd(amount, weight, kick){
+  spin.pulse += amount * weight; if(kick) spin.kick += kick;
+  if(amount > 0){ state.stats.runEarned += amount; if(weight === 1){ state.stats.earnedType += amount; hudBump(amount, kick > 0); } else state.stats.earnedIdle += amount; }
+}
+const cv = $('rotor'), cx = cv.getContext('2d');
+let cw = 0, ch = 0;
+function resizeRotor(){ const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cw = r.width; ch = r.height; cv.width = cw * d; cv.height = ch * d; cx.setTransform(d, 0, 0, d, 0, 0); }
+new ResizeObserver(resizeRotor).observe($('rotorwrap'));
+// Velocidade = base + fluxo de bytes (idle pesa 10%) + WPM do farm + impulsos (frase completa / trace)
+const rotorVel = () => Math.min(12, 0.25 + 0.55 * Math.log10(1 + spin.rate) + state.wpmView * 0.03 + spin.kick);
+// Esferas = total de upgrades comprados. Anéis extras = +1 a cada 100 unidades de cada upgrade.
+function reactorCounts(){ let n = 0, extra = 0; UPGRADES.forEach(u => { const o = state.owned[u.id] || 0; n += o; extra += Math.floor(o / 100); }); return { n, extra }; }
+// Erro de digitação: flash vermelho na tela + glitch/shockwave no reator
+function onTypeError(){
+  spin.err = 1; fx.brake = 1; fx.glitch = Math.max(fx.glitch, .5);   // anéis travam + glitch
+  const f = $('errflash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+}
+function tickWpm(dt){
+  if(state.mode === 'FARM' && state.farmStart){
+    const el = Math.max(3000, Date.now() - state.farmStart);
+    state.farmAvg = (state.farmChars / 5) / (el / 60000);                 // média da sessão de farm
+    state.wpmView += (state.farmAvg - state.wpmView) * 0.25;
+    if(el >= 8000){
+      if(!state.recFired && state.recBase > 0 && state.farmAvg > state.recBase){ state.recFired = true; fxEvent('crown'); }   // recorde pessoal
+      state.stats.bestWpm = Math.max(state.stats.bestWpm, state.farmAvg);
+    }
+  } else {
+    state.wpmView *= Math.exp(-dt / 12);                                  // sem farm, a média cai
+    if(state.wpmView < 0.05) state.wpmView = 0;
+  }
+}
+/* ================= JUICE DO REATOR =================
+   fxEvent(tipo, ...) dispara efeitos; o desenho fica em drawRotor.
+   >>> Para novos efeitos: adicione um 'else if' em fxEvent e desenhe em drawRotor. */
+const hexRGB = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const PHI = (1 + Math.sqrt(5)) / 2, PM = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+function mkPoly(v){   // normaliza e liga os vértices mais próximos (arestas)
+  v = v.map(q => { const l = Math.hypot(q[0], q[1], q[2]); return q.map(x => x / l); });
+  const D = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); let d = 9; const ed = [];
+  v.forEach((p, i) => v.forEach((q, j) => { if(j > i) d = Math.min(d, D(p, q)); }));
+  v.forEach((p, i) => v.forEach((q, j) => { if(j > i && D(p, q) < d * 1.01) ed.push([i, j]); }));
+  return { v, e: ed };
+}
+const cubeV = []; [-1, 1].forEach(x => [-1, 1].forEach(y => [-1, 1].forEach(z => cubeV.push([x, y, z]))));
+// Evolução do núcleo: tier = unidade do maior saldo já atingido (B, KB, MB, GB, TB, PB, EB+)
+const POLY_NAMES = ['SPHERE', 'TETRAHEDRON', 'CUBE', 'OCTAHEDRON', 'ICOSAHEDRON', 'DODECAHEDRON', 'COMPOUND'];
+const POLYS = [null,
+  mkPoly([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]),
+  mkPoly(cubeV),
+  mkPoly([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]),
+  mkPoly(PM.flatMap(([a, b]) => [[0, a, b * PHI], [a, b * PHI, 0], [b * PHI, 0, a]])),
+  mkPoly(cubeV.concat(PM.flatMap(([a, b]) => [[0, a / PHI, b * PHI], [a / PHI, b * PHI, 0], [b * PHI, 0, a / PHI]]))),
+];
+const fx = { parts: [], waves: [], born: {}, orbList: null, lit: {}, pulse: 0, lightNext: false, brake: 0, glitch: 0, shake: 0, boot: 0,
+  crown: 0, nova: -1, ringOn: 0, ringBorn: null, banner: null, scan: null, trace: null, radar: 0, sonarT: 0, ph: 0, tkT: 0, tickAt: 0,
+  last: Date.now(), lastExtra: null, tierSeen: null, rankSeen: null, rgb: null, hum: null };
+function fxEvent(k, a, b, c){
+  const W = (r, v, life, A, d) => fx.waves.push({ r, v, life, max: life, a: A, d: d || 0 });
+  if(k === 'key'){ fx.pulse = 1; fx.lightNext = true; fx.tickAt++; fx.tkT = 1.2; W(1, 1.4, .35, .45); }
+  else if(k === 'done'){
+    W(.8, 3.2, .9, .9); W(.8, 2, .7, .6, .12);
+    for(let i = 0; i < 10; i++){ const ang = Math.random() * 6.28, d = Math.max(cw, ch) * .6;
+      fx.parts.push({ x0: cw / 2 + Math.cos(ang) * d, y0: ch / 2 + Math.sin(ang) * d * .6, t: -Math.random() * .15, dur: .75, txt: i === 0 ? '+' + fmtB(a) : '' }); }
+  }
+  else if(k === 'buy'){          // a = qtd antes, b = quantidade, c = tipo
+    fx.orbList = fx.orbList || []; const batch = b > 1;
+    for(let i = 0; i < b; i++){ const idx = fx.orbList.length; fx.orbList.push(c === 'active' ? 1 : 0);
+      if(i < 60){ const ang = Math.random() * 6.28, d = Math.max(cw, ch);   // lote = chuva vinda de cima
+        fx.born[idx] = { t: -i * .05, x0: batch ? Math.random() * cw : cw / 2 + Math.cos(ang) * d, y0: batch ? -30 - Math.random() * 60 : ch / 2 + Math.sin(ang) * d }; } }
+  }
+  else if(k === 'scan') fx.scan = { t: 0, h: [0, 1, 2, 3, 4].map(() => ({ a: Math.random() * 6.28, y: Math.random() * 1.6 - .8 })) };
+  else if(k === 'trace') fx.trace = { t: 0 };
+  else if(k === 'glitch') fx.glitch = 1;
+  else if(k === 'shake') fx.shake = 1;
+  else if(k === 'farmOn'){ W(.5, 3, .8, .8); W(.5, 2.2, .8, .5, .15); }
+  else if(k === 'farmOff') W(2.2, -1.5, .6, .5);
+  else if(k === 'crown'){ fx.crown = 1; fxEvent('banner', 'NEW PERSONAL BEST // ' + state.farmAvg.toFixed(1) + ' WPM'); fxEvent('waves', 3); }
+  else if(k === 'nova') fx.nova = 0;
+  else if(k === 'banner') toast(a);
+  else if(k === 'waves') for(let i = 0; i < a; i++) W(1, 2.5, 1.1, .8, i * .22);
+}
+function fxActivity(){   // voltou depois de ficar parado: reboot do reator
+  if((Date.now() - fx.last) / 1000 > 40){ fx.boot = 1; fxEvent('waves', 2); fxEvent('banner', 'REACTOR REBOOT'); }
+  fx.last = Date.now();
+}
+/* ===== HUD de dinheiro sobre o reator =====
+   Saldo rola até o valor real; pulsa a cada ganho digitado; "+X" sobem do núcleo;
+   unidade nova (KB->MB...) dá um "pop"; gasto pisca vermelho. Abaixo: ganho idle e ao vivo. */
+const hud = { init: false, shown: 0, last: 0, unit: '', unitSet: false, hist: [], lastPop: 0, idleT: 0 };
+const hudBal = $('hudbal'), hudNum = $('hudnum'), hudUnit = $('hudunit'), hudIdle = $('hudidle'), hudWrap = $('rotorwrap'), hudNextTxt = $('hudnexttxt'), hudFill = $('hudbarfill'), hudComboTxt = $('hudcombotxt'), comboFill = $('combofill');
+function hudAnim(el, cls){ el.classList.remove('hb-bump', 'hb-bump2', 'hb-pop', 'hb-spend', 'hb-tick'); void el.offsetWidth; el.classList.add(cls); }
+function hudFloat(txt, cls){
+  const el = document.createElement('span'); el.className = 'hf ' + cls; el.textContent = txt;
+  el.style.left = (50 + (Math.random() - .5) * 36) + '%'; hudWrap.appendChild(el); setTimeout(() => el.remove(), 1500);
+}
+function hudBump(amount, big){            // chamado quando você ganha digitando (big = frase completa)
+  hudAnim(hudBal, big ? 'hb-bump2' : 'hb-bump');
+  const now = performance.now();
+  if(big || now - hud.lastPop > 140){ hud.lastPop = now; hudFloat('+' + fmtB(amount), big ? 'big' : ''); }
+}
+function updateHud(dt){
+  const tg = state.bytes, now = performance.now(), S = state.stats;
+  if(!hud.init){ hud.init = true; hud.shown = tg; hud.last = tg; }
+  hud.shown += (tg - hud.shown) * (1 - Math.exp(-dt * 12));
+  if(Math.abs(tg - hud.shown) < Math.max(1e-3, tg * 1e-5)) hud.shown = tg;
+  if(tg < hud.last - Math.max(.5, hud.last * .001)){ hudFloat('-' + fmtB(hud.last - tg), 'spend'); hudAnim(hudBal, 'hb-spend'); }
+  hud.last = tg;
+  const tx = fmtB(hud.shown).split(' '); hudNum.textContent = tx[0];
+  if(tx[1] !== hud.unit){ hud.unit = tx[1]; hudUnit.textContent = tx[1]; const ui = UNIT_LIST.indexOf(tx[1]);
+    if(hud.unitSet){ hudAnim(hudBal, 'hb-pop'); if(ui > hud.uiMax){ hud.uiMax = ui; fxEvent('waves', 3); playSfx('ok'); } }   // fanfarra: nova unidade
+    else hud.uiMax = ui;
+    hud.unitSet = true; }
+  hudIdle.textContent = fmtB(bps()) + '/s';
+  const nx = UPGRADES.find(u => cost(u) > state.bytes);                    // barra da próxima compra
+  if(nx){
+    const c = cost(nx), r = bps(), eta = r > 0 ? (c - state.bytes) / r : Infinity, rev = state.stats.seen[nx.id] || state.bytes >= c * .25;
+    hudNextTxt.textContent = L2('próxima: ', 'next: ') + (rev ? nx.name + ' (' + fmtB(c) + ')' : '???') + '  ' + (isFinite(eta) ? L2('em ', 'in ') + fmtEta(eta) : L2('digite!', 'type!'));
+    hudFill.style.width = Math.min(100, state.bytes / c * 100) + '%';
+  } else { hudNextTxt.textContent = L2('tudo ao alcance!', 'everything affordable!'); hudFill.style.width = '100%'; }
+  const cm = comboMult(), cap = comboCap();                                  // medidor de combo + bordas pegando fogo
+  hudComboTxt.textContent = 'COMBO x' + cm.toFixed(1) + (cm >= 5 ? '  ✦ OVERDRIVE ✦' : cm >= 3 ? '  ◆ HEAT ◆' : '');
+  comboFill.style.width = Math.min(100, (cm - 1) / Math.max(1, cap - 1) * 100) + '%';
+  document.body.classList.toggle('hot', cm >= 3 && cm < 5); document.body.classList.toggle('fire', cm >= 5);
+  hud.idleT += dt;
+  if(hud.idleT >= 1){ hud.idleT = 0; if(bps() > 0){ hudFloat('+' + fmtB(bps()), 'idle'); hudAnim($('hudrate'), 'hb-tick'); } }   // pulso a cada segundo
+}
+function drawRotor(now){
+  const dt = Math.min(0.1, (now - spin.last) / 1000); spin.last = now;
+  requestAnimationFrame(drawRotor);
+  if(dt <= 0 || !cw) return;
+  spin.rate += (spin.pulse / dt - spin.rate) * (1 - Math.exp(-dt / 2.5)); spin.pulse = 0;
+  spin.kick *= Math.exp(-dt / 1.2);
+  spin.err = Math.max(0, spin.err - dt / 0.8);
+  [['pulse', .35], ['brake', .9], ['glitch', .5], ['shake', .35], ['boot', .8], ['crown', 1.4]].forEach(([k, d]) => { fx[k] = Math.max(0, fx[k] - dt / d); });
+  fx.tkT = Math.max(0, fx.tkT - dt * .8);
+  fx.ringOn += ((state.mode === 'FARM' ? 1 : 0) - fx.ringOn) * (1 - Math.exp(-dt / .4));   // anéis ligam no farm, stand-by fora
+  if(fx.nova >= 0) fx.nova += dt / 1.5;
+  const S = state.stats; S.maxBytes = Math.max(S.maxBytes || 0, state.bytes);
+  updateHud(dt);
+  const idle = (Date.now() - fx.last) / 1000, cool = Math.min(1, Math.max(0, (idle - 20) / 40));   // parado: esfria
+  const v = rotorVel() * (1 - .9 * fx.brake) * (1 - .7 * cool);
+  spin.ang += v * dt; spin.ang2 -= v * dt * .6 * (.5 + .5 * fx.ringOn);
+  // --- marcos: evolução do núcleo e rank ---
+  const tier = Math.min(6, Math.floor(Math.log(Math.max(1, S.maxBytes)) / Math.log(1024)));
+  if(fx.tierSeen === null) fx.tierSeen = tier;
+  else if(tier > fx.tierSeen){ fx.tierSeen = tier; fxEvent('banner', 'CORE EVOLVED // ' + POLY_NAMES[tier]); fxEvent('waves', 3); playSfx('ok'); }
+  const rk = rankInfo().cur[1];
+  if(fx.rankSeen === null) fx.rankSeen = rk;
+  else if(rk !== fx.rankSeen){ fx.rankSeen = rk; fxEvent('banner', 'RANK UP // ' + rk); fxEvent('waves', 4); logEvent('rank ' + rk); playSfx('ok'); }
+  // --- esferas / anéis ---
+  const rc = reactorCounts();
+  if(!fx.orbList || fx.orbList.length !== rc.n){ fx.orbList = []; UPGRADES.forEach(u => { for(let k = 0; k < (state.owned[u.id] || 0); k++) fx.orbList.push(u.type === 'active' ? 1 : 0); }); }
+  const rings = [[1.35, 1.0, 12], [1.7, 0.6, 24]];
+  for(let i = 0; i < Math.min(rc.extra, 10); i++) rings.push([1.7 + 0.28 * (i + 1), (0.3 + i * 0.55) % 1.4, 24 + 6 * i]);
+  if(fx.lastExtra === null) fx.lastExtra = rc.extra;
+  else if(rc.extra > fx.lastExtra){ fx.lastExtra = rc.extra; fx.ringBorn = { idx: Math.min(rc.extra, 10) + 1, t: 0 }; }
+  const maxR = rings[rings.length - 1][0];
+  // --- cores (transição suave de tema) e estabilidade ---
+  const tg = hexRGB(spin.fg); if(!fx.rgb) fx.rgb = tg.slice();
+  for(let i = 0; i < 3; i++) fx.rgb[i] += (tg[i] - fx.rgb[i]) * (1 - Math.exp(-dt / .35));
+  const e = spin.err, C = e > .02 ? [255, 59, 59] : fx.rgb.map(Math.round), rgba = al => `rgba(${C[0]},${C[1]},${C[2]},${Math.min(1, al)})`, col = rgba(1);
+  const tot = state.totalTyped + S.errors, acc = tot > 50 ? state.totalTyped / tot : 1, unstable = Math.max(0, Math.min(1, (.95 - acc) / .25));
+  let fa = 1 - .55 * cool; if(Math.random() < unstable * .2) fa *= .25 + Math.random() * .4;   // precisão baixa: falhas de brilho
+  const cl = Math.min(1, state.combo / 40), od = comboMult() >= 5;
+  // --- geometria / câmera ---
+  const bw = 1 + Math.log10(1 + bps()) * .25; fx.ph += dt * bw;                              // respiração no ritmo do B/s
+  const nm = fx.nova < 0 ? 1 : fx.nova < .55 ? 1 - fx.nova / .55 * .92 : .08;               // implosão no reset
+  const Rr = Math.min(cw, ch) * .46 / Math.max(2, maxR) * (1 + .02 * Math.sin(fx.ph) + .05 * fx.pulse + .03 * fx.boot) * nm, tilt = .4;
+  const jit = fx.shake * 10 + fx.glitch * 6 + unstable * 3;
+  const X = cw / 2 + (Math.random() - .5) * jit, Y = ch / 2 + (Math.random() - .5) * jit;
+  if(e > .5) spin.ang += (Math.random() - .5) * .3;
+  const P = (x, y, z, ay, ax) => {
+    let c = Math.cos(ay), s = Math.sin(ay); const x1 = x * c + z * s, z1 = -x * s + z * c;
+    c = Math.cos(ax); s = Math.sin(ax); const y1 = y * c - z1 * s, z2 = y * s + z1 * c;
+    const k = 1 / (1 + z2 * .3); return [X + x1 * Rr * k, Y + y1 * Rr * k, z2];
+  };
+  const path = (fn, n) => { cx.beginPath(); for(let k = 0; k <= n; k++){ const p = fn(k / n * 6.2832); k ? cx.lineTo(p[0], p[1]) : cx.moveTo(p[0], p[1]); } cx.stroke(); };
+  if(od){ cx.globalCompositeOperation = 'destination-out'; cx.fillStyle = 'rgba(0,0,0,.28)'; cx.fillRect(0, 0, cw, ch); cx.globalCompositeOperation = 'source-over'; }   // overdrive: imagem residual
+  else cx.clearRect(0, 0, cw, ch);
+  fx.dust = fx.dust || Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random() * .8 + .2 }));
+  fx.dust.forEach(d => { d.x -= dt * (.015 + v * .012) * d.z; if(d.x < 0){ d.x = 1; d.y = Math.random(); }
+    cx.globalAlpha = .45 * d.z * fa; cx.fillStyle = rgba(1); cx.fillRect(d.x * cw, d.y * ch, 1 + d.z, 1 + d.z); });         // poeira estelar que acelera com ω
+  cx.strokeStyle = cx.fillStyle = col; cx.shadowColor = col; cx.shadowBlur = 8 + cl * 16 + e * 14; cx.lineWidth = acc > .98 ? 1.5 : 1;
+  // núcleo brilhante (cresce com combo/tecla)
+  const gl = cx.createRadialGradient(X, Y, 0, X, Y, Rr * .9); gl.addColorStop(0, rgba(.15 + cl * .3 + fx.pulse * .15 + fx.boot * .4)); gl.addColorStop(1, rgba(0));
+  cx.globalAlpha = fa; cx.fillStyle = gl; cx.beginPath(); cx.arc(X, Y, Rr * .9, 0, 7); cx.fill(); cx.fillStyle = col;
+  if(hwOn()){                                                    // Halloween: o núcleo vira uma abóbora acesa
+    const fr = Rr * .34; cx.globalAlpha = Math.min(1, .55 + .25 * Math.sin(fx.ph * 5) + Math.random() * .1) * fa; cx.fillStyle = '#ffb347'; cx.shadowColor = '#ff7a18'; cx.shadowBlur = 18;
+    [-1, 1].forEach(sg => { cx.beginPath(); cx.moveTo(X + sg * fr * .5, Y - fr * .35); cx.lineTo(X + sg * fr * .5 - fr * .22, Y - fr * .05); cx.lineTo(X + sg * fr * .5 + fr * .22, Y - fr * .05); cx.closePath(); cx.fill(); });
+    cx.beginPath(); cx.moveTo(X, Y + fr * .05); cx.lineTo(X - fr * .08, Y + fr * .22); cx.lineTo(X + fr * .08, Y + fr * .22); cx.closePath(); cx.fill();
+    cx.beginPath(); cx.moveTo(X - fr * .8, Y + fr * .4); for(let k = 0; k <= 8; k++) cx.lineTo(X - fr * .8 + k * fr * .2, Y + fr * (k % 2 ? .75 : .45)); cx.lineTo(X + fr * .8, Y + fr * .4); cx.closePath(); cx.fill();
+    cx.fillStyle = col; cx.shadowColor = col;
+  }
+  if(comboMult() >= 3){ cx.globalAlpha = (.25 + .15 * Math.sin(fx.ph * 3)) * fa; cx.lineWidth = 3; cx.beginPath(); cx.arc(X, Y, Rr * (maxR + .2), 0, 7); cx.stroke(); cx.lineWidth = acc > .98 ? 1.5 : 1; }   // halo x3
+  cx.globalAlpha = .55 * fa;
+  if(tier === 0){
+    for(let i = 0; i < 8; i++){ const ph = i * Math.PI / 8; path(a => P(Math.cos(a) * Math.cos(ph), Math.sin(a), Math.cos(a) * Math.sin(ph), spin.ang, tilt), 48); }
+    for(let j = -2; j <= 2; j++){ const y = j / 3, rr = Math.sqrt(1 - y * y); path(a => P(Math.cos(a) * rr, y, Math.sin(a) * rr, spin.ang, tilt), 48); }
+  } else {
+    const dr = (po, ay, sc) => { cx.beginPath(); po.e.forEach(([i, j]) => { const p = po.v[i], q = po.v[j], A = P(p[0] * sc, p[1] * sc, p[2] * sc, ay, tilt), B = P(q[0] * sc, q[1] * sc, q[2] * sc, ay, tilt); cx.moveTo(A[0], A[1]); cx.lineTo(B[0], B[1]); }); cx.stroke();
+      po.v.forEach(p => { const A = P(p[0] * sc, p[1] * sc, p[2] * sc, ay, tilt); cx.fillRect(A[0] - 2, A[1] - 2, 4, 4); }); };
+    if(tier >= 6){ dr(POLYS[5], spin.ang, 1); dr(POLYS[4], -spin.ang * .8, 1.18); } else dr(POLYS[tier], spin.ang, 1);
+  }
+  // anéis (ticks do externo piscam no ritmo da digitação; anel novo é desenhado em arco)
+  rings.forEach(([r, ax, ticks], idx) => {
+    const ay = spin.ang2 * (idx % 2 ? -1 : 1), born = fx.ringBorn && fx.ringBorn.idx === idx ? fx.ringBorn : null, prog = born ? Math.min(1, born.t) : 1;
+    cx.globalAlpha = (.35 + .55 * fx.ringOn) * fa; cx.lineWidth = born ? 2.5 : 1;
+    cx.beginPath(); for(let k = 0; k <= 80 * prog; k++){ const a = k / 80 * 6.2832, p = P(Math.cos(a) * r, 0, Math.sin(a) * r, ay, tilt + ax); k ? cx.lineTo(p[0], p[1]) : cx.moveTo(p[0], p[1]); } cx.stroke(); cx.lineWidth = 1;
+    if(born){ born.t += dt / .8; if(born.t >= 1){ fx.ringBorn = null; fxEvent('waves', 1); playSfx('enter'); } return; }   // "encaixe" com estalo
+    const outer = idx === rings.length - 1, head = fx.tickAt % ticks;
+    for(let k = 0; k < ticks; k++){ const a = k / ticks * 6.2832, p = P(Math.cos(a) * r, 0, Math.sin(a) * r, ay, tilt + ax), dd = (head - k + ticks) % ticks, w = outer && dd < 5 ? (1 - dd / 5) * Math.min(1, fx.tkT) : 0;
+      cx.fillRect(p[0] - 2 - 2 * w, p[1] - 2 - 2 * w, 4 + 4 * w, 4 + 4 * w); }
+  });
+  // esferas: 1 por upgrade (amarelo = ativo, cor do tema = passivo); nascem de fora da tela
+  const pos = [], N = Math.min(rc.n, 240); let nearI = -1, nearZ = 9;
+  for(let i = 0; i < N; i++){
+    const a = i * 2.399 + spin.ang2 * (.6 + ((i * 7) % 5) * .25) * (i % 2 ? -1 : 1), inc = (i * .73) % 3.14, rad = 1.1 + (i % 6) * .04, lx = Math.cos(a) * rad;
+    const p = P(lx * Math.cos(inc), lx * Math.sin(inc), Math.sin(a) * rad, spin.ang * .3, tilt); pos[i] = p;
+    const oc = fx.orbList[i] ? 'rgb(255,176,0)' : col, b = fx.born[i]; let px = p[0], py = p[1];
+    cx.fillStyle = oc; cx.strokeStyle = oc;
+    if(b){ b.t += dt / .9; if(b.t < 0) continue;
+      const k = Math.min(1, b.t), ez = 1 - Math.pow(1 - k, 3); px = b.x0 + (p[0] - b.x0) * ez; py = b.y0 + (p[1] - b.y0) * ez;
+      for(let g = 1; g < 5; g++){ const eg = 1 - Math.pow(1 - Math.max(0, k - g * .05), 3); cx.globalAlpha = (.5 - g * .1) * fa; cx.beginPath(); cx.arc(b.x0 + (p[0] - b.x0) * eg, b.y0 + (p[1] - b.y0) * eg, 3, 0, 7); cx.fill(); }
+      if(b.t >= 1){ delete fx.born[i]; fx.lit[i] = 1.5; } }
+    if(p[2] < nearZ){ nearZ = p[2]; nearI = i; }
+    const lv = fx.lit[i] || 0; cx.globalAlpha = (p[2] > 0 ? .45 : 1) * fa; cx.beginPath(); cx.arc(px, py, 3 + lv * 3, 0, 7); cx.fill();
+    if(lv > .05){ cx.globalAlpha = Math.min(1, lv) * .6 * fa; cx.beginPath(); cx.arc(px, py, 6 + lv * 8, 0, 7); cx.stroke(); }
+  }
+  cx.fillStyle = cx.strokeStyle = col;
+  if(fx.lightNext && nearI >= 0) fx.lit[nearI] = 1; fx.lightNext = false;                 // esfera mais próxima acende
+  for(const k in fx.lit){ fx.lit[k] -= dt * 2.5; if(fx.lit[k] <= 0) delete fx.lit[k]; }
+  // efeitos dos daemons: ping = sonar, nmap = radar, relay = arcos entre esferas
+  const ow = id => state.owned[id] || 0;
+  if(ow(2)){ fx.sonarT += dt; if(fx.sonarT > Math.max(.9, 3 - ow(2) * .04)){ fx.sonarT = 0; fx.waves.push({ r: .5, v: .9, life: 2, max: 2, a: .35, d: 0 }); } }
+  if(ow(3)){ fx.radar += dt * (1.2 + Math.min(ow(3), 20) * .05);
+    for(let g = 0; g < 10; g++){ const a = fx.radar - g * .06; cx.globalAlpha = (.5 - g * .05) * fa; cx.beginPath(); cx.moveTo(X, Y); cx.lineTo(X + Math.cos(a) * Rr * 1.15, Y + Math.sin(a) * Rr * 1.15); cx.stroke(); } }
+  if(ow(4) && N > 5){ cx.globalAlpha = .35 * fa; for(let k = 0; k < Math.min(ow(4), 8); k++){ const A = pos[(k * 3) % N], B = pos[(k * 3 + 5) % N]; if(!A || !B) continue; cx.beginPath(); cx.moveTo(A[0], A[1]); cx.quadraticCurveTo(X, Y, B[0], B[1]); cx.stroke(); } }
+  // scan: radar varre o globo e os hosts aparecem
+  if(fx.scan){ const sc = fx.scan; sc.t += dt; const pr = sc.t / 1.8, ang = pr * 6.2832 - 1.57;
+    if(pr <= 1) for(let g = 0; g < 7; g++){ cx.globalAlpha = (.8 - g * .1) * fa; cx.beginPath(); cx.moveTo(X, Y); cx.lineTo(X + Math.cos(ang - g * .05) * Rr * 1.5, Y + Math.sin(ang - g * .05) * Rr * 1.5); cx.stroke(); }
+    sc.h.forEach(h => { const at = h.a / 6.2832 * 1.8, age = sc.t - at; if(age < 0 || age > 2.2) return; const rr = Math.sqrt(1 - h.y * h.y), p = P(Math.cos(h.a) * rr, h.y, Math.sin(h.a) * rr, spin.ang, tilt);
+      cx.globalAlpha = Math.max(0, 1 - age / 2.2) * fa; cx.beginPath(); cx.arc(p[0], p[1], 4 + (age < .3 ? 4 : 0), 0, 7); cx.fill(); });
+    if(sc.t > 4.2) fx.scan = null; }
+  // trace: raios saltam entre esferas (hops)
+  if(fx.trace){ const tr = fx.trace; tr.t += dt;
+    const pts = [0, 1, 2, 3].map(k => pos[(k * 7 + 1) % Math.max(N, 1)] || [X + (k - 1.5) * Rr * .6, Y + (k % 2 ? -1 : 1) * Rr * .5]);
+    for(let k = 0; k < 3; k++){ const q = tr.t - k * .4; if(q < 0 || q > 1) continue; const A = pts[k], B = pts[k + 1];
+      cx.globalAlpha = (1 - q) * fa; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(A[0], A[1]);
+      for(let t2 = 1; t2 < 6; t2++) cx.lineTo(A[0] + (B[0] - A[0]) * t2 / 6 + (Math.random() - .5) * 14, A[1] + (B[1] - A[1]) * t2 / 6 + (Math.random() - .5) * 14);
+      cx.lineTo(B[0], B[1]); cx.stroke(); cx.beginPath(); cx.arc(B[0], B[1], 6, 0, 7); cx.stroke(); }
+    cx.lineWidth = 1; if(tr.t > 2) fx.trace = null; }
+  // ondas e partículas "+bytes"
+  fx.waves = fx.waves.filter(w => { if(w.d > 0){ w.d -= dt; return true; } w.life -= dt; w.r += w.v * dt; if(w.life <= 0) return false;
+    cx.globalAlpha = w.a * (w.life / w.max) * fa; cx.lineWidth = 2; cx.beginPath(); cx.arc(X, Y, Math.max(1, Rr * w.r), 0, 7); cx.stroke(); cx.lineWidth = 1; return true; });
+  cx.shadowBlur = 0; cx.font = '12px monospace';
+  fx.parts = fx.parts.filter(q => { q.t += dt / q.dur; if(q.t < 0) return true; if(q.t >= 1) return false;
+    const k = q.t * q.t, x = q.x0 + (X - q.x0) * k, y = q.y0 + (Y - q.y0) * k; cx.globalAlpha = (1 - k * .6) * fa;
+    if(q.txt) cx.fillText(q.txt, x - 20, y); else { cx.beginPath(); cx.arc(x, y, 2, 0, 7); cx.fill(); } return true; });
+  // coroa de recorde
+  if(fx.crown > 0){ const c = fx.crown, r1 = Rr * (1.9 + (1 - c) * .6); cx.strokeStyle = '#ffd76a'; cx.globalAlpha = c; cx.lineWidth = 2; cx.beginPath(); cx.arc(X, Y, r1, 0, 7); cx.stroke();
+    for(let i = 0; i < 24; i++){ const a = i / 24 * 6.2832 + spin.ang; cx.beginPath(); cx.moveTo(X + Math.cos(a) * r1, Y + Math.sin(a) * r1); cx.lineTo(X + Math.cos(a) * (r1 + 16 * c), Y + Math.sin(a) * (r1 + 16 * c)); cx.stroke(); }
+    cx.lineWidth = 1; cx.strokeStyle = col; }
+  if(fx.boot > 0){ cx.globalAlpha = 1; cx.fillStyle = rgba(.3 * fx.boot); cx.fillRect(0, 0, cw, ch); cx.fillStyle = col; }                 // flash do reboot
+  if(fx.glitch > 0) for(let i = 0; i < 7; i++){ cx.globalAlpha = fx.glitch * .5; cx.fillRect(0, Math.random() * ch, cw, 1 + Math.random() * 3); }   // estática
+  if(fx.nova >= .55){ const k = Math.min(1, (fx.nova - .55) / .45); cx.globalAlpha = 1 - k; cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch);   // supernova
+    cx.strokeStyle = '#fff'; cx.lineWidth = 6; cx.beginPath(); cx.arc(cw / 2, ch / 2, k * Math.max(cw, ch), 0, 7); cx.stroke(); cx.lineWidth = 1; cx.fillStyle = col; cx.strokeStyle = col; }
+  cx.globalAlpha = .8; cx.fillStyle = col; cx.font = '12px monospace';
+  if(fx.banner){ const b = fx.banner; b.t += dt; if(b.t > 3.2) fx.banner = null; else { cx.globalAlpha = Math.max(0, Math.min(1, b.t * 3, (3.2 - b.t) / .6)); cx.font = '14px monospace'; cx.fillText(b.text, cw / 2 - cx.measureText(b.text).width / 2, 44); cx.font = '12px monospace'; cx.globalAlpha = .8; } }
+  cx.fillText(POLY_NAMES[tier], 12, ch - 10);
+  cx.globalAlpha = 1;
+}
+requestAnimationFrame(drawRotor);
+function updateSide(){
+  const rc = reactorCounts();
+  $('sidefoot').textContent = `ω ${rotorVel().toFixed(2)} rad/s   WPM ${wpm()}   ${L2('FLUXO', 'FLOW')} ${fmtB(spin.rate)}/s\n` +
+    `${L2('esferas', 'orbs')} ${rc.n}   ${L2('anéis', 'rings')} ${2 + rc.extra}   (${L2('idle vale 10%', 'idle counts 10%')})`;
+}
+// ---- painel de dados (esquerda) ----
+function fmtT(ms){ const s = Math.floor(ms / 1000), m = Math.floor(s / 60), h = Math.floor(m / 60); return (h ? h + 'h' : '') + String(m % 60).padStart(h ? 2 : 1, '0') + 'm' + String(s % 60).padStart(2, '0') + 's'; }
+function updateStats(){
+  const S = state.stats, rc = reactorCounts(), inFarm = state.mode === 'FARM' && state.farmStart;
+  const tot = state.totalTyped + S.errors, acc = tot ? (state.totalTyped / tot * 100).toFixed(1) + '%' : '--';
+  const farmMs = S.farmMs + (state.mode === 'FARM' ? Date.now() - state.farmEnter : 0);
+  const L = [], row = (pt, en, v) => L.push(L2(pt, en).padEnd(15) + v), head = (pt, en) => L.push('', '== ' + L2(pt, en) + ' ==');
+  const ri = rankInfo(), fr = ri.next ? Math.max(0, Math.min(1, (state.totalTyped - ri.cur[0]) / (ri.next[0] - ri.cur[0]))) : 1, nb = Math.round(fr * 16);
+  L.push('▲ ' + ri.cur[1], '[' + '#'.repeat(nb) + '-'.repeat(16 - nb) + '] ' + (ri.next ? ri.next[1] : 'MAX'));      // barra de rank
+  head('DIGITAÇÃO', 'TYPING');
+  row('WPM ao vivo', 'WPM live', inFarm ? state.wpmView.toFixed(1) : '--');
+  row('Média sessões', 'Sessions avg', avgWpm().toFixed(1) + ' (' + S.wpmCount + ')');
+  row('Última sessão', 'Last session', S.lastAvg.toFixed(1));
+  row('Melhor sessão', 'Best session', S.bestWpm.toFixed(1));
+  row('Precisão', 'Accuracy', acc);
+  row('Acertos', 'Hits', state.totalTyped);
+  row('Erros', 'Errors', S.errors);
+  row('Combo', 'Combo', `x${comboMult().toFixed(1)} (${state.combo})`);
+  row('Combo máx', 'Max combo', S.maxCombo);
+  row('Frases feitas', 'Lines done', S.done);
+  row('Tempo em farm', 'Farm time', fmtT(farmMs));
+  row('Sessões', 'Sessions', S.sessions);
+  if(S.done) row('s / frase', 's / line', (farmMs / 1000 / S.done).toFixed(1));
+  head('BYTES', 'BYTES');
+  row('Saldo', 'Balance', fmtB(state.bytes));
+  row('Saldo em bits', 'In bits', fmtB(state.bytes * 8, true));
+  row('Ganho digitando', 'Typed total', fmtB(S.earnedType));
+  row('Ganho idle', 'Idle total', fmtB(S.earnedIdle));
+  row('B/s idle', 'Idle B/s', fmtB(bps()) + '/s');
+  row('B/caractere', 'B/char', fmtB(perChar()));
+  head('UPGRADES', 'UPGRADES');
+  const ownedUp = UPGRADES.filter(u => state.owned[u.id]);
+  ownedUp.forEach(u => { const n = state.owned[u.id]; L.push(u.name.padEnd(17) + ('x' + n).padEnd(5) + '+' + fmtB(upPower(u)) + (u.type === 'passive' ? '/s' : '/ch')); });
+  if(!ownedUp.length) L.push(L2('(nenhum ainda)', '(none yet)'));
+  row('Total unidades', 'Total units', rc.n);
+  row('Esferas / anéis', 'Orbs / rings', rc.n + ' / ' + (2 + rc.extra));
+  row('Temas', 'Themes', state.themesOwned.length + '/' + THEMES.length);
+  head('PRESTÍGIO', 'PRESTIGE');
+  row('Root keys', 'Root keys', (S.rk || 0) + '  (x' + presMult().toFixed(2) + ')');
+  row('Ganho da run', 'Run earned', fmtB(S.runEarned || 0));
+  row('Keys ao prestige', 'Keys on prestige', '+' + rkGain());
+  row('Prestígios', 'Prestiges', S.prestiges || 0);
+  row('Peças', 'Parts', PARTS.filter(q => hasPart(q.id)).length + '/' + PARTS.length);
+  row('Conquistas', 'Achievements', ACH.filter(a => S.ach[a.id]).length + '/' + ACH.length + '  (x' + achMult().toFixed(2) + ')');
+  row('Pontos de perk', 'Perk points', S.pp || 0);
+  row('Linhas perfeitas', 'Perfect lines', S.perfects + '  (★ ' + S.golds + ')');
+  head('SISTEMA', 'SYSTEM');
+  row('Jogador', 'Player', state.playerName || '-');
+  row('Rank', 'Rank', rankInfo().cur[1]);
+  row('Nó', 'Node', state.nodeId + '.mesh');
+  row('Uptime', 'Uptime', uptimeStr());
+  $('statbody').textContent = L.join('\n');
+}
+
+let lastTick = Date.now();   // usa o tempo real: aba em segundo plano não perde ganho idle
+setInterval(() => { const nowT = Date.now(), dtT = Math.min(300, (nowT - lastTick) / 1000); lastTick = nowT; const g = bps() * dtT; state.bytes += g; spinAdd(g, IDLE_W); tickWpm(Math.min(.25, dtT)); updateHeader(); updateSide(); updateStats(); gameTick(dtT); }, 100);
+setInterval(saveGame, 5000);
+window.addEventListener('beforeunload', saveGame);
+
+/* =========================================================
+   9. BOOT
+   ========================================================= */
+/* ================= PROGRESSÃO EXTRA ================= */
+const UNIT_LIST = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB', 'RB', 'QB'];
+const fmtEta = x => x < 60 ? Math.ceil(x) + 's' : x < 3600 ? Math.floor(x / 60) + 'm' + String(Math.ceil(x % 60)).padStart(2, '0') + 's' : x < 86400 ? Math.floor(x / 3600) + 'h' + String(Math.floor(x % 3600 / 60)).padStart(2, '0') + 'm' : '>1d';
+const fmtDur = x => { const h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60); return h ? h + 'h ' + m + 'min' : m + 'min'; };
+// Marcos: cada upgrade dobra de rendimento ao chegar nestas quantidades
+const MS = [10, 25, 50, 100, 150, 200, 250];
+const msCount = n => MS.filter(m => n >= m).length;
+const nextMs = n => MS.find(m => n < m);
+const upPower = u => { const n = state.owned[u.id] || 0; return u.value * n * Math.pow(2, msCount(n)); };
+// Perks (comprados com pontos de prestige)
+const perkLvl = id => (state.stats.perks && state.stats.perks[id]) || 0;
+const PERKS = [
+  { id: 'start', max: 5, cost: l => l,     n: ['Cache de boot', 'Boot cache'],            d: l => L2(`começa cada run com ${fmtB(100 * KB * Math.pow(10, l - 1))}`, `start each run with ${fmtB(100 * KB * Math.pow(10, l - 1))}`) },
+  { id: 'off',   max: 4, cost: l => l,     n: ['Daemons persistentes', 'Persistent daemons'], d: l => L2(`offline: limite ${2 + 2 * l}h, eficiência ${50 + 10 * l}%`, `offline: ${2 + 2 * l}h cap, ${50 + 10 * l}% efficiency`) },
+  { id: 'combo', max: 5, cost: l => l,     n: ['Buffer de combo', 'Combo buffer'],        d: l => L2(`+${l} no combo máximo`, `+${l} max combo`) },
+  { id: 'auto',  max: 4, cost: l => l + 1, n: ['Auto-installer', 'Auto-installer'],       d: l => L2(`compra sozinho os ${3 * l} primeiros upgrades`, `auto-buys the first ${3 * l} upgrades`) },
+  { id: 'gold',  max: 4, cost: l => l,     n: ['Sorte do root', 'Root luck'],             d: l => L2(`+${50 * l}% chance de linha dourada`, `+${50 * l}% golden line chance`) },
+];
+// Conquistas: cada uma dá +2% em tudo, para sempre. [id, pt, en, valor atual, meta, é-bytes?]
+const ACH = [
+  ['wpm40', 'Dedos rápidos', 'Fast fingers', () => state.stats.bestWpm, 40], ['wpm60', 'Datilógrafo', 'Typist', () => state.stats.bestWpm, 60], ['wpm90', 'Lenda do teclado', 'Keyboard legend', () => state.stats.bestWpm, 90],
+  ['combo25', 'Embalado', 'On a roll', () => state.stats.maxCombo, 25], ['combo100', 'Imparável', 'Unstoppable', () => state.stats.maxCombo, 100],
+  ['lines50', 'Aquecendo', 'Warming up', () => state.stats.done, 50], ['lines500', 'Operador veterano', 'Veteran operator', () => state.stats.done, 500],
+  ['perf20', 'Sem erros', 'Flawless', () => state.stats.perfects, 20], ['gold1', 'Ouro!', 'Gold!', () => state.stats.golds, 1],
+  ['mb1', 'Primeiro MB', 'First MB', () => state.stats.maxBytes, MB, 1], ['gb1', 'Primeiro GB', 'First GB', () => state.stats.maxBytes, GB, 1], ['tb1', 'Primeiro TB', 'First TB', () => state.stats.maxBytes, TB, 1],
+  ['ms1', 'Marco alcançado', 'Milestone', () => state.stats.msCount, 1], ['pres1', 'Reinstalado', 'Reinstalled', () => state.stats.prestiges, 1],
+  ['parts3', 'Montador', 'Builder', () => PARTS.filter(q => hasPart(q.id)).length, 3], ['themes5', 'Estilista', 'Stylist', () => state.themesOwned.length, 5],
+  ['acc98', 'Precisão cirúrgica', 'Surgical accuracy', () => { const tt = state.totalTyped + state.stats.errors; return tt >= 500 ? state.totalTyped / tt * 100 : 0; }, 98],
+  ['off1', 'Bem-vindo de volta', 'Welcome back', () => state.stats.offlines, 1],
+].map(([id, pt, en, cur, tg, b]) => ({ id, pt, en, cur, tg, b }));
+const achMult = () => 1 + 0.02 * ACH.filter(a => state.stats.ach[a.id]).length;
+// Tutorial dos primeiros minutos (avança por eventos: farm -> done -> store -> buy)
+const HINTS = [
+  ['digite  tasks  e aperte ENTER para entrar no modo digitação.', 'type  tasks  and press ENTER to enter typing mode.'],
+  ['copie a linha cinza exatamente como aparece. Cada acerto rende bytes.', 'copy the grey line exactly as shown. Every hit earns bytes.'],
+  ['boa! Aperte ESC para sair e digite  store  para ver o que comprar.', 'nice! Press ESC to leave and type  store  to see what to buy.'],
+  ['compre o primeiro upgrade, ex:  buy 1  (ou o que você conseguir pagar).', 'buy your first upgrade, e.g.  buy 1  (or whatever you can afford).'],
+];
+function tut(ev){
+  const S = state.stats, idx = { farm: 0, done: 1, store: 2, buy: 3 }[ev];
+  if(idx === undefined || S.tut !== idx) return;
+  S.tut = idx + 1;
+  print('[TUTORIAL ' + Math.min(4, S.tut + 1) + '/5] ' + (S.tut < 4 ? L2(HINTS[S.tut][0], HINTS[S.tut][1]) : L2('pronto! Explore: botão UPGRADES (peças e temas), prestige, perks, achievements e help.', 'done! Explore: UPGRADES button (parts and themes), prestige, perks, achievements and help.')), 'warn');
+}
+function tutBoot(){
+  const S = state.stats; if(S.tut) return;
+  if(state.totalTyped > 100 || Object.keys(state.owned).length){ S.tut = 4; return; }          // jogador antigo: pula
+  print('[TUTORIAL 1/5] ' + L2(HINTS[0][0], HINTS[0][1]), 'warn');
+}
+// Tick de 1s: revela upgrades, libera pacotes, confere conquistas; auto-installer a cada 0,6s
+let tickAcc = 0, autoT = 0;
+function gameTick(dt){
+  const S = state.stats, al = perkLvl('auto'); autoT += dt;
+  if(al && autoT >= .6){ autoT = 0; UPGRADES.slice(0, 3 * al).forEach(u => { if(state.bytes >= cost(u)) doBuy(u, 1, true); }); }
+  tickAcc += dt; if(tickAcc < 1) return; tickAcc = 0;
+  UPGRADES.forEach(u => { if(!S.seen[u.id] && state.bytes >= cost(u) * .25) S.seen[u.id] = 1; });
+  PACKS.forEach(pk => { if(state.totalTyped >= pk.at && !S.packSeen[pk.id]){ S.packSeen[pk.id] = 1;
+    print(L2(`>> novo pacote de comandos: ${pk.id} (frases mais longas, pagam mais)`, `>> new command pack: ${pk.id} (longer lines, better pay)`), 'warn'); fxEvent('banner', 'NEW COMMAND PACK // ' + pk.id); fxEvent('waves', 2); playSfx('ok'); } });
+  ACH.forEach(a => { if(!S.ach[a.id] && a.cur() >= a.tg){ S.ach[a.id] = 1;
+    print(L2(`★ CONQUISTA: ${a.pt} (+2% em tudo)`, `★ ACHIEVEMENT: ${a.en} (+2% to everything)`), 'warn'); logEvent('achievement ' + a.id); fxEvent('banner', 'ACHIEVEMENT // ' + a.en); fxEvent('waves', 2); playSfx('ok'); } });
+}
+// Ganho offline: 50% do idle por até 2h (perk 'off' aumenta); contagem animada
+const off = { open: false };
+function offlineReturn(){
+  const S = state.stats; if(!state.savedAt || !state.playerName) return;
+  const secs = (Date.now() - state.savedAt) / 1000, l = perkLvl('off'), cap = (2 + 2 * l) * 3600, eff = .5 + .1 * l;
+  if(secs < 60 || bps() <= 0) return;
+  const gain = bps() * Math.min(secs, cap) * eff;
+  state.bytes += gain; S.earnedIdle += gain; S.runEarned += gain; S.offlines++; logEvent('offline +' + fmtB(gain));
+  state.modal = true; off.open = true;
+  $('offtitle').textContent = L2('BEM-VINDO DE VOLTA', 'WELCOME BACK');
+  $('offtext').textContent = L2(`Você ficou fora por ${fmtDur(secs)}${secs > cap ? ' (limite de ganho atingido)' : ''}. Seus daemons renderam:`, `You were away for ${fmtDur(secs)}${secs > cap ? ' (gain cap reached)' : ''}. Your daemons earned:`);
+  $('offmodal').style.display = 'flex'; setTimeout(() => $('offok').focus(), 50); playSfx('ok');
+  const t0 = performance.now(), N = $('offnum');
+  (function step(now){ const k = Math.min(1, (now - t0) / 2200); N.textContent = '+' + fmtB(gain * (1 - Math.pow(1 - k, 3))); if(k < 1 && off.open) requestAnimationFrame(step); else N.textContent = '+' + fmtB(gain); })(t0);
+}
+$('offok').addEventListener('click', () => { off.open = false; state.modal = false; $('offmodal').style.display = 'none'; fxEvent('waves', 2); focusHidden(); });
+
+/* ================= VISUAL EXTRA ================= */
+const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);   // respeita "reduzir movimento"
+const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳' };
+function toast(txt){                                   // cartão que desliza no canto: conquistas, marcos, rank, peças...
+  const parts = String(txt).split(' // '), box = $('toasts'), d = document.createElement('div'), b = document.createElement('b');
+  d.className = 'toast'; b.textContent = (TOAST_ICON[parts[0]] || '●') + ' ' + parts[0]; d.appendChild(b); d.appendChild(document.createTextNode(parts.slice(1).join(' // ')));
+  box.appendChild(d); while(box.children.length > 4) box.firstChild.remove(); setTimeout(() => d.remove(), 3700);
+}
+// Chuva de dados no fundo: mais densa e rápida com o ganho idle e o combo
+const rain = $('rain'), rcx = rain.getContext('2d'), RC = 14; let rcols = [], rlast = 0;
+function resizeRain(){
+  const d = window.devicePixelRatio || 1; rain.width = innerWidth * d; rain.height = innerHeight * d; rcx.setTransform(d, 0, 0, d, 0, 0);
+  rcols = Array.from({ length: Math.ceil(innerWidth / RC) }, () => ({ y: Math.random() * innerHeight / RC, v: .4 + Math.random() * .8, on: Math.random() }));
+}
+addEventListener('resize', resizeRain); resizeRain();
+function rainLoop(now){
+  requestAnimationFrame(rainLoop);
+  if(REDUCE || document.body.classList.contains('no-crt') || now - rlast < 55) return; rlast = now;
+  const lvl = Math.min(1, .12 + Math.log10(1 + bps()) * .05 + Math.min(state.combo, 40) / 80);
+  rcx.globalCompositeOperation = 'destination-out'; rcx.fillStyle = 'rgba(0,0,0,.14)'; rcx.fillRect(0, 0, innerWidth, innerHeight); rcx.globalCompositeOperation = 'source-over';
+  rcx.fillStyle = spin.fg; rcx.font = RC + 'px monospace';
+  rcols.forEach((c, i) => {
+    if(c.on > lvl) return;
+    rcx.fillText(hwOn() ? HW_SYM[Math.floor(Math.random() * HW_SYM.length)] : '01<>/{}[]$#ABCDEF'[Math.floor(Math.random() * 18)], i * RC, c.y * RC); c.y += c.v * (.6 + lvl);
+    if(c.y * RC > innerHeight + 40 && Math.random() > .96){ c.y = 0; c.on = Math.random(); }
+  });
+}
+requestAnimationFrame(rainLoop);
+// Faíscas saem da letra digitada (e uma rajada maior ao completar a linha)
+function sparkBurst(el){
+  if(REDUCE || !el) return;
+  const r = el.getBoundingClientRect(), box = $('sparks'), x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+  for(let i = 0; i < 6; i++){
+    const d = document.createElement('i'), ang = Math.random() * 6.283, dist = 14 + Math.random() * 26;
+    if(hwOn()){ d.className = 'emo'; d.textContent = HW_SYM[Math.floor(Math.random() * HW_SYM.length)]; }
+    d.style.left = x0 + 'px'; d.style.top = y0 + 'px'; d.style.setProperty('--dx', Math.cos(ang) * dist + 'px'); d.style.setProperty('--dy', (Math.sin(ang) * dist - 10) + 'px');
+    if(state.cmd && state.cmd.gold){ d.style.background = '#ffd76a'; d.style.boxShadow = '0 0 6px #ffd76a'; }
+    box.appendChild(d); setTimeout(() => d.remove(), 520);
+  }
+}
+// Cena de prestige: log de reinstalação -> flash branco -> contagem das root keys e do multiplicador
+function prestigeScene(g, oldM){
+  if(REDUCE) return;
+  const ov = $('prestige'), pre = $('prepre'), num = $('prenum'), mult = $('premult'), newM = 1 + .1 * ((state.stats.rk || 0) + g);
+  ov.className = ''; ov.style.display = 'flex'; num.textContent = ''; mult.textContent = ''; $('pretitle').textContent = 'REINSTALLING SYSTEM';
+  const log = ['wiping /dev/bytes ............', 'unmounting daemons ...........', 'purging upgrade cache ........', 'forging root keys ............', 'rebuilding kernel ............', 'reboot'];
+  let i = 0; const tk = setInterval(() => { pre.textContent = log.slice(0, ++i).map(l => '> ' + l).join('\n'); playSfx('click', { pitch: i * 90 }); if(i >= log.length) clearInterval(tk); }, 220);
+  setTimeout(() => { ov.className = 'flash'; playSfx('ok'); }, 1450);
+  setTimeout(() => {
+    ov.className = ''; $('pretitle').textContent = 'ROOT KEY ACQUIRED'; pre.textContent = ''; playSfx('ok');
+    const t0 = performance.now();
+    (function step(now){ const k = Math.min(1, (now - t0) / 1600), e = 1 - Math.pow(1 - k, 3);
+      num.textContent = '+' + Math.round(g * e) + ' ♦'; mult.textContent = 'x' + (oldM + (newM - oldM) * e).toFixed(2); if(k < 1) requestAnimationFrame(step); })(t0);
+  }, 1700);
+  setTimeout(() => { ov.className = 'out'; setTimeout(() => { ov.style.display = 'none'; ov.className = ''; }, 700); }, 4100);
+}
+// Tela de título: logo em letras de caixa com efeito de embaralhar; qualquer tecla ou clique entra
+const LOGO = { T: ['╔╦╗', ' ║ ', ' ╩ '], E: ['╔═╗', '║╣ ', '╚═╝'], R: ['╦═╗', '╠╦╝', '╩╚═'], M: ['╔╦╗', '║║║', '╩ ╩'], I: ['╦', '║', '╩'], N: ['╔╗╔', '║║║', '╝╚╝'], A: ['╔═╗', '╠═╣', '╩ ╩'], L: ['╦  ', '║  ', '╩═╝'], D: ['╔╦╗', ' ║║', '═╩╝'], ' ': ['  ', '  ', '  '] };
+let bootPhase = 0, bootTitle = null;
+function showTitle(){
+  if(bootPhase) return; bootPhase = 1;
+  const rows = [0, 1, 2].map(r => [...'TERMINAL IDLE'].map(ch => LOGO[ch][r]).join('')), S = state.stats, pre = $('bootpre'), cta = $('bootcta'), N = 16;
+  const info = state.playerName ? L2(`operador ${state.playerName}  |  root keys ${S.rk || 0}  |  saldo ${fmtB(state.bytes)}`, `operator ${state.playerName}  |  root keys ${S.rk || 0}  |  balance ${fmtB(state.bytes)}`) : L2('nova partida', 'new game');
+  const render = step => {
+    const rr = rows.map(r => [...r].map((ch, i) => ch === ' ' || i / r.length < step / N ? ch : '▒░#%&'[Math.floor(Math.random() * 5)]).join(''));
+    pre.textContent = rr.join('\n') + '\n\n   idle typing // hacker terminal\n\n' + info;
+  };
+  let step = 0; bootTitle = { done: false };
+  const id = setInterval(() => { render(++step); if(step >= N) bootTitle.finish(); }, 55);
+  bootTitle.finish = () => { clearInterval(id); render(N); bootTitle.done = true; cta.textContent = L2('[ PRESSIONE QUALQUER TECLA OU CLIQUE ]', '[ PRESS ANY KEY OR CLICK ]'); };
+}
+// Abertura: boot do BIOS + logo (qualquer tecla ou clique pula)
+let bootOn = !REDUCE; const bootQ = [];
+function afterBoot(fn){ bootOn ? bootQ.push(fn) : fn(); }
+function endBoot(){ if(!bootOn) return; bootOn = false; try{ ensureAudio(); playSfx('enter'); }catch(e){} const b = $('boot'); b.style.opacity = 0; setTimeout(() => b.remove(), 600); bootQ.splice(0).forEach(f => f()); }
+function startBoot(){
+  if(!bootOn){ $('boot').remove(); return; }
+  const lines = ['BIOS v1.0  //  ' + state.nodeId + '.mesh', 'memory check ........... OK', 'mounting /dev/mesh ....... OK', 'loading kernel modules ... OK', 'spawning daemons ......... OK', 'uplink established ....... OK'];
+  let i = 0; const pre = $('bootpre');
+  const id = setInterval(() => { if(bootPhase){ clearInterval(id); return; } pre.textContent = lines.slice(0, ++i).join('\n') + '█'; if(i >= lines.length){ clearInterval(id); setTimeout(showTitle, 350); } }, 90);
+  const adv = () => { if(!bootPhase) showTitle(); else if(!bootTitle.done) bootTitle.finish(); else endBoot(); };   // tecla/clique: pula -> completa -> entra
+  document.addEventListener('keydown', e => { if(!bootOn) return; e.stopImmediatePropagation(); e.preventDefault(); if(!['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) adv(); }, true);
+  $('boot').addEventListener('click', adv);
+}
+
+/* ================= TEMA HALLOWEEN (efeitos exclusivos) ================= */
+const HW_SYM = ['🎃', '👻', '🦇', '💀', '🕷', '🍬'];
+const HW_FLAVOR = ['BOO!', 'spooky!', 'witchy!', 'trick or treat!', 'cursed combo!', 'haunted!'];
+let hwT = { bat: 0, ghost: 0, bolt: 0 };
+const hwOn = () => state.theme === 'halloween';
+function hwFly(sym, cls, dur){ const e = document.createElement('div'); e.className = cls; e.textContent = sym; $('hwlayer').appendChild(e); setTimeout(() => e.remove(), dur); return e; }
+function hwTick(){      // a cada 1s: morcegos cruzam a tela, fantasma clicável dá bônus, relâmpagos
+  if(!hwOn() || document.hidden || REDUCE) return;
+  const now = Date.now();
+  if(now > hwT.bat){ hwT.bat = now + 4000 + Math.random() * 6000; const b = hwFly('🦇', 'hw-bat', 7200); b.style.top = (8 + Math.random() * 55) + 'vh'; if(Math.random() < .5) b.classList.add('rev'); }
+  if(now > hwT.ghost){ hwT.ghost = now + 25000 + Math.random() * 20000; const g = hwFly('👻', 'hw-ghost', 12200); g.style.left = (10 + Math.random() * 75) + 'vw';
+    g.addEventListener('click', () => { const gain = Math.max(50, bps() * 30); state.bytes += gain; spinAdd(gain, IDLE_W);   // clique no fantasma: 30 s de idle
+      toast('BOO // +' + fmtB(gain)); fxEvent('waves', 2); playSfx('ok'); g.remove(); }); }
+  if(now > hwT.bolt){ hwT.bolt = now + 20000 + Math.random() * 25000; const l = $('lightning'); l.classList.remove('go'); void l.offsetWidth; l.classList.add('go'); }
+}
+setInterval(hwTick, 1000);
+
+/* ---- Prestige: reinstala o sistema em troca de root keys ---- */
+function doPrestige(){
+  if(rkGain() < 1) return;
+  fxEvent('nova');                                           // implosão -> supernova; o reset acontece no pico do flash
+  print(L2('>> reinstalando o sistema...', '>> reinstalling the system...'), 'warn');
+  prestigeScene(rkGain(), presMult());
+  setTimeout(() => {
+    const S = state.stats, g = rkGain();
+    S.rk = (S.rk || 0) + g; S.pp = (S.pp || 0) + 1 + (g >= 10) + (g >= 100) + (g >= 1000); S.prestiges = (S.prestiges || 0) + 1; S.runEarned = 0;
+    state.bytes = perkLvl('start') ? 100 * KB * Math.pow(10, perkLvl('start') - 1) : 0; state.owned = {}; state.combo = 0; state.pending = null; fx.orbList = null; fx.born = {}; hud.init = false; hud.uiMax = 0;
+    logEvent('prestige +' + g + ' RK'); saveGame(); updateHeader();
+    print(L2(`>> sistema reinstalado. +${g} root keys (x${presMult().toFixed(2)} em tudo).`, `>> system reinstalled. +${g} root keys (x${presMult().toFixed(2)} on everything).`));
+  }, 1500);
+  setTimeout(() => { fx.nova = -1; fxEvent('banner', 'PRESTIGE // x' + presMult().toFixed(2)); fxEvent('waves', 5); playSfx('ok'); }, 2400);
+}
+/* ---- Janela de peças (botão UPGRADES / comando hardware) ---- */
+const hw = { open: false, armed: null, rows: null, thRows: null, tab: 'parts' };
+function partDesc(q){
+  const pc = Math.round((q.kind === 'disc' ? 1 - q.v : q.v - 1) * 100);
+  return ({ idle: L2(`+${pc}% ganho idle`, `+${pc}% idle income`), type: L2(`+${pc}% ganho digitando`, `+${pc}% typing income`), all: L2(`+${pc}% em tudo`, `+${pc}% to everything`),
+    disc: L2(`-${pc}% custo dos upgrades`, `-${pc}% upgrade costs`), combo: L2(`+${q.v} no combo máximo`, `+${q.v} max combo`), rk: L2(`+${pc}% root keys no prestige`, `+${pc}% root keys on prestige`) })[q.kind];
+}
+function buyPart(q){
+  if(hasPart(q.id) || state.bytes < q.cost) return;
+  state.bytes -= q.cost; state.stats.parts[q.id] = 1;
+  print(L2(`[HW] ${q.name} instalado: ${partDesc(q)}`, `[HW] ${q.name} installed: ${partDesc(q)}`), 'warn');
+  logEvent('hardware ' + q.name); fxEvent('banner', 'HARDWARE // ' + q.name); fxEvent('waves', 2); playSfx('ok'); saveGame(); updateHeader();
+}
+function buildHw(){
+  if(hw.rows) return; hw.rows = [];
+  PARTS.forEach(q => {
+    const row = document.createElement('div'), left = document.createElement('div'), pn = document.createElement('div'), pd = document.createElement('div'), pr = document.createElement('div'), btn = document.createElement('button');
+    row.className = 'hwrow'; pn.className = 'pn'; pd.className = 'pd'; pr.className = 'pr'; btn.className = 'tbtn'; btn.type = 'button'; pn.textContent = q.name;
+    left.appendChild(pn); left.appendChild(pd); row.appendChild(left); row.appendChild(pr); row.appendChild(btn); $('hwlist').appendChild(row);
+    btn.addEventListener('click', () => {                    // 1º clique arma, 2º confirma (evita compra por engano)
+      if(hasPart(q.id) || state.bytes < q.cost) return;
+      if(hw.armed === q.id){ buyPart(q); hw.armed = null; }
+      else { hw.armed = q.id; setTimeout(() => { if(hw.armed === q.id){ hw.armed = null; updateHw(); } }, 3000); }
+      updateHw();
+    });
+    hw.rows.push({ q, row, pd, pr, btn });
+  });
+}
+function updateParts(){
+  const S = state.stats, n = PARTS.filter(q => hasPart(q.id)).length;
+  $('hwtitle').textContent = 'HARDWARE & EXPLOITS';
+  $('hwsum').textContent = L2(`Saldo ${fmtB(state.bytes)}  |  Root keys ${S.rk || 0} (x${presMult().toFixed(2)})  |  Peças ${n}/${PARTS.length}  |  Permanentes: sobrevivem ao prestige`,
+    `Balance ${fmtB(state.bytes)}  |  Root keys ${S.rk || 0} (x${presMult().toFixed(2)})  |  Parts ${n}/${PARTS.length}  |  Permanent: survive prestige`);
+  hw.rows.forEach(({ q, row, pd, pr, btn }) => {
+    const o = hasPart(q.id), can = state.bytes >= q.cost;
+    row.className = 'hwrow' + (o ? ' own' : can ? '' : ' dim');
+    pd.textContent = partDesc(q); pr.textContent = o ? '' : fmtB(q.cost); btn.disabled = o || !can;
+    btn.textContent = o ? L2('INSTALADO', 'INSTALLED') : hw.armed === q.id ? L2('CONFIRMAR?', 'CONFIRM?') : L2('COMPRAR', 'BUY');
+  });
+}
+function setTheme(T, silent){
+  state.theme = T.id; applyAppearance(); saveGame(); fxEvent('waves', 1);
+  if(!silent) print(t('theme_active', { name: T.name }));
+}
+function buyTheme(T){
+  if(ownsTheme(T.id) || state.bytes < T.cost) return;
+  state.bytes -= T.cost; state.themesOwned.push(T.id); setTheme(T, true);
+  print(t('theme_unlocked', { name: T.name })); fxEvent('banner', 'THEME // ' + T.name); playSfx('ok'); updateHeader();
+}
+function buildTh(){
+  if(hw.thRows) return; hw.thRows = [];
+  THEMES.forEach(T => {
+    const mk = (tag, cls) => { const e = document.createElement(tag); if(cls) e.className = cls; return e; };
+    const row = mk('div', 'hwrow'), left = mk('div'), pn = mk('div', 'pn'), pd = mk('div', 'pd'), sm = mk('div', 'thsample'), pr = mk('div', 'pr'), btn = mk('button', 'tbtn');
+    btn.type = 'button'; pn.textContent = T.name; pd.textContent = L2('fonte: ', 'font: ') + T.font.split(',')[0].replace(/'/g, '') + (T.fx !== 'none' ? '  |  fx: ' + T.fx : '');
+    sm.textContent = 'root@node:~# ls -la  0123 Aa'; sm.style.cssText = `background:${T.bg};color:${T.fg};font-family:${T.font};border:1px solid ${T.fg};padding:2px 8px;margin-top:5px;font-size:12px;text-shadow:none;letter-spacing:${T.ls || 0}em`;
+    left.appendChild(pn); left.appendChild(pd); left.appendChild(sm); row.appendChild(left); row.appendChild(pr); row.appendChild(btn); $('thlist').appendChild(row);
+    btn.addEventListener('click', () => {
+      if(ownsTheme(T.id)){ if(state.theme !== T.id) setTheme(T); updateHw(); return; }   // já é seu: ativa
+      if(state.bytes < T.cost) return;
+      const k = 't' + T.id;                                                              // comprar: 1º clique arma, 2º confirma
+      if(hw.armed === k){ buyTheme(T); hw.armed = null; }
+      else { hw.armed = k; setTimeout(() => { if(hw.armed === k){ hw.armed = null; updateHw(); } }, 3000); }
+      updateHw();
+    });
+    hw.thRows.push({ T, row, pr, btn });
+  });
+}
+function updateTh(){
+  $('hwsum').textContent = L2(`Saldo ${fmtB(state.bytes)}  |  Temas ${state.themesOwned.length}/${THEMES.length}  |  cada tema muda cores, fonte e efeitos`, `Balance ${fmtB(state.bytes)}  |  Themes ${state.themesOwned.length}/${THEMES.length}  |  each theme changes colors, font and effects`);
+  hw.thRows.forEach(({ T, row, pr, btn }) => {
+    const o = ownsTheme(T.id), act = state.theme === T.id, can = state.bytes >= T.cost;
+    row.className = 'hwrow' + (act ? ' own' : o || can ? '' : ' dim');
+    pr.textContent = o ? '' : (T.cost ? fmtB(T.cost) : L2('grátis', 'free')); btn.disabled = act || (!o && !can);
+    btn.textContent = act ? L2('ATIVO', 'ACTIVE') : o ? L2('ATIVAR', 'APPLY') : hw.armed === 't' + T.id ? L2('CONFIRMAR?', 'CONFIRM?') : L2('COMPRAR', 'BUY');
+  });
+}
+function updateHw(){
+  const th = hw.tab === 'themes';
+  $('tabparts').textContent = L2('PEÇAS', 'PARTS'); $('tabthemes').textContent = L2('TEMAS', 'THEMES');
+  $('tabparts').classList.toggle('on', !th); $('tabthemes').classList.toggle('on', th);
+  $('hwlist').style.display = th ? 'none' : ''; $('thlist').style.display = th ? '' : 'none';
+  if(th) updateTh(); else updateParts();
+  $('hwtitle').textContent = th ? 'THEMES // STYLE' : 'HARDWARE & EXPLOITS';
+}
+$('tabparts').addEventListener('click', () => { hw.tab = 'parts'; hw.armed = null; updateHw(); });
+$('tabthemes').addEventListener('click', () => { hw.tab = 'themes'; hw.armed = null; updateHw(); });
+function openHw(tab){
+  if(state.modal) return; state.modal = true; hw.open = true; buildHw(); buildTh(); if(tab) hw.tab = tab; updateHw();
+  $('hwmodal').style.display = 'flex'; setTimeout(() => $('hwclose').focus(), 50);
+}
+function closeHw(){ hw.open = false; hw.armed = null; state.modal = false; $('hwmodal').style.display = 'none'; focusHidden(); }
+setInterval(() => { if(hw.open) updateHw(); }, 500);
+$('hwbtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openHw(); });
+$('hwclose').addEventListener('click', closeHw);
+$('hwmodal').addEventListener('click', e => { if(e.target.id === 'hwmodal') closeHw(); });
+document.addEventListener('keydown', e => { if(hw.open && e.key === 'Escape') closeHw(); });
+
+/* ---- Janela de nome (primeira execução) ---- */
+function cleanName(v){ v = (v || '').trim().replace(/\s+/g, ' '); return /^[\p{L}\p{N} _-]{2,16}$/u.test(v) ? v : null; }
+function openNameModal(){
+  state.modal = true;
+  $('nmtitle').textContent = L2('NOVO OPERADOR DETECTADO', 'NEW OPERATOR DETECTED');
+  $('nmask').textContent = L2('Identifique-se. Qual é o seu nome?', 'Identify yourself. What is your name?');
+  $('nmhint').className = 'dim';
+  $('nmhint').textContent = L2('2 a 16 caracteres (letras, números, espaço, _ ou -). ENTER confirma.', '2-16 characters (letters, digits, space, _ or -). ENTER confirms.');
+  $('namemodal').style.display = 'flex';
+  setTimeout(() => $('nameinput').focus(), 50);
+}
+$('nameinput').addEventListener('keydown', e => {
+  if(e.key !== 'Enter') return;
+  e.stopPropagation();          // evita o mesmo ENTER rodar um comando vazio no terminal
+  const v = cleanName(e.target.value);
+  if(!v){ $('nmhint').className = 'err'; $('nmhint').textContent = L2('Nome inválido. Use 2 a 16 caracteres.', 'Invalid name. Use 2-16 characters.'); return; }
+  state.playerName = v; state.modal = false; $('namemodal').style.display = 'none';
+  print(L2(`>> bem-vindo, ${v}. Digite "help" para começar.`, `>> welcome, ${v}. Type "help" to begin.`), 'warn');
+  logEvent('operator registered: ' + v); saveGame(); updateHeader(); focusHidden(); tutBoot();
+});
+// Reset total: apaga o save e recarrega (state.wiping impede o autosave de regravar)
+function wipeGame(){
+  state.wiping = true; fxEvent('nova');
+  try{ localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY_LEGACY); }catch(e){}
+  print(L2('>> apagando sistema... reiniciando.', '>> wiping system... rebooting.'), 'warn');
+  setTimeout(() => location.reload(), 1800);
+}
+
+loadGame();
+applyAppearance();
+print(t('boot0'), 'dim');
+print(t('boot1'), 'dim');
+print(t('boot2'), 'dim');
+print(t('boot3'));
+print('TerminalIdle v1.2  //  node ' + state.nodeId + '.mesh');
+print(t('boot_tip'), 'dim');
+renderPrompt(); updateHeader();
+if(!state.playerName) openNameModal(); else { focusHidden(); afterBoot(() => { offlineReturn(); tutBoot(); }); }
+startBoot();   // 1ª vez: pergunta o nome
+</script>
+</body>
+</html>
