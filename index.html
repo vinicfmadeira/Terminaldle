@@ -208,6 +208,19 @@ body.th-halloween #hudbal,body.th-halloween .toast b,body.th-halloween #pretitle
 #lightning.go{animation:bolt .7s}
 @keyframes bolt{0%{opacity:0}5%{opacity:.9}12%{opacity:0}20%{opacity:.7}35%{opacity:0}100%{opacity:0}}
 #sparks i.emo{width:auto;height:auto;background:none !important;box-shadow:none !important;font-size:14px;font-style:normal}
+#evbox{display:none;position:fixed;inset:0;z-index:6;background:rgba(40,0,10,.55);align-items:center;justify-content:center}
+.evcard{width:min(94vw,760px);border:var(--bw) var(--bs) #ff3355;background:var(--bg);padding:18px;box-shadow:0 0 30px rgba(255,40,70,.6);text-align:center}
+#evtitle{font-size:1.3em;letter-spacing:.2em;color:#ff3355;text-shadow:0 0 12px #ff3355;animation:gtxt .5s steps(2) infinite}
+#evsub{margin-top:6px;opacity:.9;white-space:pre-line}
+#evtext{font-size:1.15em;text-align:left;word-break:break-all;margin:14px 0;line-height:1.55}
+#evtext.big{font-size:3.2em;text-align:center;letter-spacing:.2em}
+#evtext .ev-ok{color:var(--fg)}#evtext .ev-todo{color:var(--dim)}#evtext .ev-cur{background:var(--fg);color:var(--bg);text-shadow:none}
+#evbox .evbar{width:100%;height:8px;margin:0}
+#evbox .hbar i{background:#ff3355;box-shadow:0 0 8px #ff3355;transition:none}
+#evinfo{margin-top:8px;opacity:.85}
+body.alert::before{opacity:.9;animation:hpulse .5s ease-in-out infinite;box-shadow:inset 0 0 140px 30px rgba(255,0,40,.6)}
+#hudbuff,#hudpen{font-size:.72em;white-space:pre-line;margin-top:3px}
+#hudbuff{color:#6dff9a}#hudpen{color:#ff5566;text-shadow:0 0 6px #ff3355}
 </style>
 </head>
 <body>
@@ -233,6 +246,10 @@ body.th-halloween #hudbal,body.th-halloween .toast b,body.th-halloween #pretitle
 <div id="boot"><div><pre id="bootpre"></pre><div id="bootcta"></div></div></div>
 <div id="prestige"><div class="pbox"><div id="pretitle"></div><pre id="prepre"></pre><div id="prenum"></div><div id="premult"></div></div></div>
 <div id="sparks"></div>
+<div id="evbox"><div class="evcard">
+  <div id="evtitle"></div><div id="evsub"></div><div id="evtext"></div>
+  <div class="hbar evbar"><i id="evfill"></i></div><div id="evinfo"></div>
+</div></div>
 <div id="errflash"></div>
 <div id="app">
   <div id="main">
@@ -256,6 +273,7 @@ body.th-halloween #hudbal,body.th-halloween .toast b,body.th-halloween #pretitle
         <div id="hudrate"><span class="arrow">▲</span> <span id="hudidle">0 B/s</span> <small>idle</small></div>
         <div id="hudnext"><span id="hudnexttxt"></span><div class="hbar"><i id="hudbarfill"></i></div></div>
         <div id="hudcombo"><span id="hudcombotxt"></span><div class="hbar"><i id="combofill"></i></div></div>
+        <div id="hudbuff"></div><div id="hudpen"></div>
       </div>
     </div>
     <div id="sidefoot"></div>
@@ -829,7 +847,7 @@ const state = {
   // WPM: média só enquanto está em FARM; fora dele o valor exibido decai
   wpmView: 0, farmStart: 0, farmChars: 0, farmAvg: 0, farmEnter: 0,
   // >>> Estatísticas persistentes (painel da esquerda). Adicione novos contadores aqui.
-  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0 },
+  stats: { errors: 0, done: 0, maxCombo: 0, bestWpm: 0, farmMs: 0, earnedType: 0, earnedIdle: 0, sessions: 0, lastAvg: 0, wpmSum: 0, wpmCount: 0, maxBytes: 0, rk: 0, prestiges: 0, runEarned: 0, parts: {}, perfects: 0, golds: 0, ach: {}, perks: {}, pp: 0, seen: {}, packSeen: {}, tut: 0, offlines: 0, msCount: 0, evWins: 0, evLoss: 0 },
 };
 
 function saveGame(){
@@ -914,9 +932,9 @@ const RK_BASE = 64 * MB;                                               // ganho 
 const rkGain = () => Math.floor(Math.sqrt(Math.max(0, state.stats.runEarned || 0) / RK_BASE) * partMult('rk'));
 const cost = u => Math.ceil(u.baseCost * Math.pow(u.scale, state.owned[u.id] || 0) * discMult());
 const bps = () => UPGRADES.filter(u=>u.type==='passive')
-  .reduce((s,u)=> s + upPower(u), 0) * partMult('idle') * partMult('all') * presMult() * achMult();
+  .reduce((s,u)=> s + upPower(u), 0) * partMult('idle') * partMult('all') * presMult() * achMult() * modMult('idle');
 const perChar = () => (1 + UPGRADES.filter(u=>u.type==='active')
-  .reduce((s,u)=> s + upPower(u), 0)) * partMult('type') * partMult('all') * presMult() * achMult();
+  .reduce((s,u)=> s + upPower(u), 0)) * partMult('type') * partMult('all') * presMult() * achMult() * modMult('type');
 const comboCap = () => 5 + PARTS.reduce((m, p) => p.kind === 'combo' && hasPart(p.id) ? m + p.v : m, 0) + perkLvl('combo');
 const comboMult = () => Math.min(comboCap(), 1 + state.combo * 0.1);
 // WPM: no farm mostra a média da sessão atual (começa em 0). Fora dele, a média das sessões registradas.
@@ -1176,6 +1194,7 @@ const SYSTEM_COMMANDS = {
       ['prestige', 'reinstala o sistema: zera bytes e upgrades, ganha root keys (+10% em tudo cada)', 'reinstall: wipes bytes and upgrades, grants root keys (+10% to everything each)'],
       ['perks [id]', 'bônus permanentes comprados com pontos de prestige (lista ou compra)', 'permanent bonuses bought with prestige points (list or buy)'],
       ['achievements', 'conquistas e progresso (+2% em tudo cada)', 'achievements and progress (+2% to everything each)'],
+      ['event [nome]', 'dispara um evento de teste (eles também surgem sozinhos de tempos em tempos)', 'triggers a test event (they also appear on their own from time to time)'],
       ['history', 'comandos anteriores (↑ ↓ navegam)', 'previous commands (↑ ↓ to browse)'],
       ['clear', 'limpa o terminal', 'clear the terminal'],
       ['whoami', 'seu rank e o que falta para o próximo', 'your rank and what is left for the next'],
@@ -1222,6 +1241,12 @@ const SYSTEM_COMMANDS = {
     print(L2(`=== CONQUISTAS ${n}/${ACH.length} (+${n * 2}% em tudo) ===`, `=== ACHIEVEMENTS ${n}/${ACH.length} (+${n * 2}% to everything) ===`));
     ACH.forEach(a => { const d = S.ach[a.id], f = a.b ? fmtB : (v => Math.floor(v));
       print(`  ${d ? '[x]' : '[ ]'} ${L2(a.pt, a.en).padEnd(22)} ${d ? '' : f(Math.min(a.cur(), a.tg)) + ' / ' + f(a.tg)}`, d ? '' : 'dim'); });
+  },
+  event(args){
+    const id = (args[0] || '').toLowerCase();
+    if(!id) return print(L2('Eventos: ', 'Events: ') + Object.keys(EVENTS).join(' | ') + L2('   (use: event <nome> para testar)', '   (use: event <name> to test)'), 'dim');
+    if(!EVENTS[id]) return print(t('not_found'), 'err');
+    if(!evStart(id)) print(L2('Não foi possível iniciar agora.', 'Could not start right now.'), 'err');
   },
   units(){
     print(L2('=== UNIDADES ===', '=== UNITS ==='));
@@ -1746,7 +1771,7 @@ function fxActivity(){   // voltou depois de ficar parado: reboot do reator
    Saldo rola até o valor real; pulsa a cada ganho digitado; "+X" sobem do núcleo;
    unidade nova (KB->MB...) dá um "pop"; gasto pisca vermelho. Abaixo: ganho idle e ao vivo. */
 const hud = { init: false, shown: 0, last: 0, unit: '', unitSet: false, hist: [], lastPop: 0, idleT: 0 };
-const hudBal = $('hudbal'), hudNum = $('hudnum'), hudUnit = $('hudunit'), hudIdle = $('hudidle'), hudWrap = $('rotorwrap'), hudNextTxt = $('hudnexttxt'), hudFill = $('hudbarfill'), hudComboTxt = $('hudcombotxt'), comboFill = $('combofill');
+const hudBal = $('hudbal'), hudNum = $('hudnum'), hudUnit = $('hudunit'), hudIdle = $('hudidle'), hudWrap = $('rotorwrap'), hudNextTxt = $('hudnexttxt'), hudFill = $('hudbarfill'), hudComboTxt = $('hudcombotxt'), comboFill = $('combofill'), hudBuff = $('hudbuff'), hudPen = $('hudpen');
 function hudAnim(el, cls){ el.classList.remove('hb-bump', 'hb-bump2', 'hb-pop', 'hb-spend', 'hb-tick'); void el.offsetWidth; el.classList.add(cls); }
 function hudFloat(txt, cls){
   const el = document.createElement('span'); el.className = 'hf ' + cls; el.textContent = txt;
@@ -1780,6 +1805,9 @@ function updateHud(dt){
   hudComboTxt.textContent = 'COMBO x' + cm.toFixed(1) + (cm >= 5 ? '  ✦ OVERDRIVE ✦' : cm >= 3 ? '  ◆ HEAT ◆' : '');
   comboFill.style.width = Math.min(100, (cm - 1) / Math.max(1, cap - 1) * 100) + '%';
   document.body.classList.toggle('hot', cm >= 3 && cm < 5); document.body.classList.toggle('fire', cm >= 5);
+  const bf = [], pn = [], nowM = Date.now();                                  // bônus e penalidades ativos
+  state.mods.forEach(m => { const ln = (m.mult < 1 ? '▼ ' : '▲ ') + m.label + ' x' + m.mult + ' ' + ({ idle: 'idle', type: L2('digit.', 'typing'), all: L2('tudo', 'all') })[m.kind] + ' (' + fmtEta((m.until - nowM) / 1000) + ')'; (m.mult < 1 ? pn : bf).push(ln); });
+  hudBuff.textContent = bf.join('\n'); hudPen.textContent = pn.join('\n');
   hud.idleT += dt;
   if(hud.idleT >= 1){ hud.idleT = 0; if(bps() > 0){ hudFloat('+' + fmtB(bps()), 'idle'); hudAnim($('hudrate'), 'hb-tick'); } }   // pulso a cada segundo
 }
@@ -1980,6 +2008,7 @@ function updateStats(){
   row('Conquistas', 'Achievements', ACH.filter(a => S.ach[a.id]).length + '/' + ACH.length + '  (x' + achMult().toFixed(2) + ')');
   row('Pontos de perk', 'Perk points', S.pp || 0);
   row('Linhas perfeitas', 'Perfect lines', S.perfects + '  (★ ' + S.golds + ')');
+  row('Eventos ok/falha', 'Events won/lost', S.evWins + ' / ' + S.evLoss);
   head('SISTEMA', 'SYSTEM');
   row('Jogador', 'Player', state.playerName || '-');
   row('Rank', 'Rank', rankInfo().cur[1]);
@@ -2024,6 +2053,7 @@ const ACH = [
   ['ms1', 'Marco alcançado', 'Milestone', () => state.stats.msCount, 1], ['pres1', 'Reinstalado', 'Reinstalled', () => state.stats.prestiges, 1],
   ['parts3', 'Montador', 'Builder', () => PARTS.filter(q => hasPart(q.id)).length, 3], ['themes5', 'Estilista', 'Stylist', () => state.themesOwned.length, 5],
   ['acc98', 'Precisão cirúrgica', 'Surgical accuracy', () => { const tt = state.totalTyped + state.stats.errors; return tt >= 500 ? state.totalTyped / tt * 100 : 0; }, 98],
+  ['ev3', 'Firewall humano', 'Human firewall', () => state.stats.evWins, 3],
   ['off1', 'Bem-vindo de volta', 'Welcome back', () => state.stats.offlines, 1],
 ].map(([id, pt, en, cur, tg, b]) => ({ id, pt, en, cur, tg, b }));
 const achMult = () => 1 + 0.02 * ACH.filter(a => state.stats.ach[a.id]).length;
@@ -2048,6 +2078,7 @@ function tutBoot(){
 // Tick de 1s: revela upgrades, libera pacotes, confere conquistas; auto-installer a cada 0,6s
 let tickAcc = 0, autoT = 0;
 function gameTick(dt){
+  evTick(dt);
   const S = state.stats, al = perkLvl('auto'); autoT += dt;
   if(al && autoT >= .6){ autoT = 0; UPGRADES.slice(0, 3 * al).forEach(u => { if(state.bytes >= cost(u)) doBuy(u, 1, true); }); }
   tickAcc += dt; if(tickAcc < 1) return; tickAcc = 0;
@@ -2076,7 +2107,7 @@ $('offok').addEventListener('click', () => { off.open = false; state.modal = fal
 
 /* ================= VISUAL EXTRA ================= */
 const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);   // respeita "reduzir movimento"
-const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳' };
+const TOAST_ICON = { ACHIEVEMENT: '★', MILESTONE: '◆', 'RANK UP': '▲', 'GOLDEN LINE': '★', 'NEW COMMAND PACK': '▣', HARDWARE: '⚙', THEME: '◐', PRESTIGE: '♻', 'NEW PERSONAL BEST': '♛', 'CORE EVOLVED': '✦', 'REACTOR REBOOT': '⟳', BREACH: '⚠', DEFENDED: '✔' };
 function toast(txt){                                   // cartão que desliza no canto: conquistas, marcos, rank, peças...
   const parts = String(txt).split(' // '), box = $('toasts'), d = document.createElement('div'), b = document.createElement('b');
   d.className = 'toast'; b.textContent = (TOAST_ICON[parts[0]] || '●') + ' ' + parts[0]; d.appendChild(b); d.appendChild(document.createTextNode(parts.slice(1).join(' // ')));
@@ -2175,6 +2206,90 @@ function hwTick(){      // a cada 1s: morcegos cruzam a tela, fantasma clicável
   if(now > hwT.bolt){ hwT.bolt = now + 20000 + Math.random() * 25000; const l = $('lightning'); l.classList.remove('go'); void l.offsetWidth; l.classList.add('go'); }
 }
 setInterval(hwTick, 1000);
+
+/* ================= EVENTOS ALEATÓRIOS =================
+   Surgem sozinhos a cada ~3-6 min com a janela aberta. Para criar outro, adicione uma entrada em EVENTS. */
+const EV_BLOCKS = [
+  'iptables -A INPUT -s 10.0.0.0/8 -j DROP && fail2ban-client set sshd banip 203.0.113.9 && systemctl restart sshd',
+  'sudo ufw default deny incoming && sudo ufw allow 22/tcp && sudo ufw enable && sudo systemctl restart ssh',
+  'kill -9 $(pgrep -f backdoor) && rm -rf /tmp/.hidden && chattr +i /etc/passwd && service rsyslog restart',
+  'nmap -sS -p- 192.168.0.0/24 | grep open && netstat -tulpn | grep LISTEN && lsof -i :4444 && kill -9 1337',
+  'openssl rand -hex 32 > key.bin && gpg --symmetric --cipher-algo AES256 vault.tar && shred -u vault.tar && ls -la',
+];
+const EV_WORDS = ['FIREWALL', 'PAYLOAD', 'ROOTKIT', 'KERNEL', 'PROXY', 'BACKDOOR', 'MALWARE', 'BINARY', 'SOCKET', 'CIPHER'];
+const evPick = a => a[Math.floor(Math.random() * a.length)];
+const caesar = (w, k) => [...w].map(c => String.fromCharCode((c.charCodeAt(0) - 65 + k) % 26 + 65)).join('');
+state.mods = [];                                            // bônus/penalidades temporários {kind, mult, label, until}
+const modMult = kind => state.mods.reduce((m, x) => (x.kind === kind || x.kind === 'all') ? m * x.mult : m, 1);
+const EVENTS = {
+  intrusion: { w: 3, errPen: 1.5, t: ['⚠ INTRUSÃO DETECTADA ⚠', '⚠ INTRUSION DETECTED ⚠'], d: ['Um invasor está no sistema! Digite o bloco inteiro antes que o tempo acabe.', 'An intruder is in the system! Type the whole block before time runs out.'],
+    mk(){ const b = evPick(EV_BLOCKS); return { targets: [b], total: Math.max(28, b.length / 3.2) }; },
+    win: { secs: 180, mods: [['all', 1.5, 60, 'FIREWALL UP']] }, lose: { mods: [['idle', .4, 120, 'RANSOMWARE']] } },
+  captcha: { w: 2, ci: true, maxErr: 3, t: ['◆ CAPTCHA DE SEGURANÇA ◆', '◆ SECURITY CAPTCHA ◆'], d: ['Prove que você é humano: digite o código (3 erros e você é bloqueado).', 'Prove you are human: type the code (3 mistakes and you are locked out).'],
+    mk(){ const al = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return { targets: [Array.from({ length: 6 }, () => al[Math.floor(Math.random() * al.length)]).join('')], total: 10 }; },
+    win: { secs: 60 }, lose: { mods: [['all', .7, 60, 'LOCKOUT']] } },
+  decrypt: { w: 2, ci: true, maxErr: 5, t: ['◆ DECIFRE A MENSAGEM ◆', '◆ DECRYPT THE MESSAGE ◆'], d: ['Cifra de César: desloque cada letra de volta e digite a palavra original.', 'Caesar cipher: shift each letter back and type the original word.'],
+    mk(){ const w = evPick(EV_WORDS), k = 1 + Math.floor(Math.random() * 5); return { targets: [w], total: 22, mask: true, extra: caesar(w, k) + '   (shift +' + k + ')' }; },
+    win: { secs: 90, mods: [['type', 1.5, 45, 'KEY CRACKED']] }, lose: { mods: [['type', .6, 60, 'CORRUPTED KEYMAP']] } },
+  keyrush: { w: 2, ci: true, advance: true, t: ['◆ KEY RUSH ◆', '◆ KEY RUSH ◆'], d: ['Aperte cada letra assim que aparecer (máx. 2 falhas em 10).', 'Hit each letter as soon as it appears (max 2 misses in 10).'],
+    mk(){ return { targets: Array.from({ length: 10 }, () => evPick([...'ASDFJKLQWERUIOP'])), per: 1.6, big: true }; },
+    win: { secs: 60, mods: [['all', 1.3, 60, 'OVERCLOCK']] }, lose: { mods: [['idle', .6, 60, 'LAG SPIKE']] } },
+};
+const ev = { act: null, nextAt: Date.now() + 150000 + Math.random() * 90000 };
+function evRender(){
+  const a = ev.act, tg = a.targets[a.idx], box = $('evtext'); box.textContent = '';
+  [...tg].forEach((ch, i) => { const sp = document.createElement('span'); sp.textContent = (i < a.pos || !a.mask) ? ch : '•'; sp.className = i < a.pos ? 'ev-ok' : i === a.pos ? 'ev-cur' : 'ev-todo'; box.appendChild(sp); });
+}
+function evStart(id){
+  const def = EVENTS[id]; if(ev.act || state.modal || !def) return false;
+  const m = def.mk(); ev.act = { id, def, targets: m.targets, idx: 0, pos: 0, errs: 0, miss: 0, hits: 0, total0: m.total || 0, tleft: m.total || 0, per: m.per || 0, pleft: m.per || 0, mask: !!m.mask, beep: 99 };
+  $('evtitle').textContent = L2(def.t[0], def.t[1]); $('evsub').textContent = L2(def.d[0], def.d[1]) + (m.extra ? '\n' + L2('Cifrado: ', 'Ciphertext: ') + m.extra : '');
+  $('evtext').className = m.big ? 'big' : ''; $('evbox').style.display = 'flex'; document.body.classList.add('alert'); evRender(); playSfx('error'); return true;
+}
+function evNext(ok){
+  const a = ev.act; if(ok) a.hits++; else a.miss++;
+  if(a.id === 'keyrush' && a.miss > 2) return evEnd(false);
+  a.idx++; a.pos = 0; a.pleft = a.per;
+  if(a.idx >= a.targets.length) return evEnd(a.id === 'keyrush' ? true : a.hits === a.targets.length);
+  evRender();
+}
+function evKey(e){
+  const a = ev.act; if(!a || e.key.length !== 1 || e.repeat) return;
+  const tg = a.targets[a.idx], want = tg[a.pos], okk = a.def.ci ? e.key.toUpperCase() === want.toUpperCase() : e.key === want;
+  if(okk){ a.pos++; playSfx('click', { pitch: (e.key.charCodeAt(0) % 18) * 40 }); if(a.pos >= tg.length) evNext(true); else evRender(); }
+  else { a.errs++; playSfx('error'); if(a.def.errPen) a.tleft -= a.def.errPen; if(a.def.advance) return evNext(false); if(a.def.maxErr && a.errs >= a.def.maxErr) evEnd(false); }
+}
+function evEnd(win){
+  const a = ev.act; if(!a) return; ev.act = null;
+  $('evbox').style.display = 'none'; document.body.classList.remove('alert');
+  const r = win ? a.def.win : a.def.lose, S = state.stats, m0 = (r.mods || [])[0]; let gain = 0;
+  if(r.secs){ gain = r.secs * Math.max(bps(), perChar() * 3); state.bytes += gain; spinAdd(gain, IDLE_W); }
+  (r.mods || []).forEach(([k, mu, secs, label]) => state.mods.push({ kind: k, mult: mu, label, until: Date.now() + secs * 1000 }));
+  win ? S.evWins++ : S.evLoss++;
+  const kl = { idle: 'idle', type: L2('digitação', 'typing'), all: L2('tudo', 'everything') };
+  const txt = (win ? L2('Ataque repelido!', 'Attack repelled!') + ' +' + fmtB(gain) : L2('Sistema comprometido', 'System compromised')) + (m0 ? '  |  ' + m0[3] + ' x' + m0[1] + ' ' + kl[m0[0]] + ' ' + fmtEta(m0[2]) : '');
+  toast((win ? 'DEFENDED // ' : 'BREACH // ') + txt); print('[EVENT] ' + txt, win ? 'warn' : 'err'); logEvent('event ' + a.id + (win ? ' won' : ' lost'));
+  if(win){ fxEvent('waves', 3); playSfx('ok'); } else { fx.glitch = 1; fx.shake = 1; spin.err = 1; playSfx('error'); }
+  ev.nextAt = Date.now() + 180000 + Math.random() * 180000; saveGame();
+}
+function evTick(dt){
+  const now = Date.now(); if(state.mods.length) state.mods = state.mods.filter(m => m.until > now);
+  const a = ev.act;
+  if(!a){
+    if(now > ev.nextAt && state.stats.done >= 3 && !state.modal && !bootOn && !document.hidden){
+      const ids = Object.keys(EVENTS), tot = ids.reduce((x, i) => x + EVENTS[i].w, 0); let r = Math.random() * tot, k = 0;
+      while(k < ids.length - 1 && r > EVENTS[ids[k]].w){ r -= EVENTS[ids[k]].w; k++; }
+      evStart(ids[k]);
+    }
+    return;
+  }
+  if(a.total0){ a.tleft -= dt; if(a.tleft <= 0) return evEnd(false); }
+  if(a.per){ a.pleft -= dt; if(a.pleft <= 0) evNext(false); if(!ev.act) return; }
+  $('evfill').style.width = Math.max(0, (a.per ? a.pleft / a.per : a.tleft / a.total0) * 100) + '%';
+  $('evinfo').textContent = (a.id === 'keyrush' ? `${a.hits}/${a.targets.length}   ${L2('falhas', 'misses')} ${a.miss}/2` : `${L2('erros', 'errors')} ${a.errs}${a.def.maxErr ? '/' + a.def.maxErr : ''}`) + (a.total0 ? '   ' + Math.ceil(Math.max(0, a.tleft)) + 's' : '');
+  if(a.total0 && a.tleft < 5 && Math.ceil(a.tleft) !== a.beep){ a.beep = Math.ceil(a.tleft); playSfx('click', { pitch: 700 }); }
+}
+document.addEventListener('keydown', e => { if(!ev.act) return; e.stopImmediatePropagation(); e.preventDefault(); evKey(e); }, true);   // durante o evento, o teclado é só dele
 
 /* ---- Prestige: reinstala o sistema em troca de root keys ---- */
 function doPrestige(){
